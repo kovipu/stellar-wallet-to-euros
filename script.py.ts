@@ -1,5 +1,6 @@
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { parse } from 'csv-parse/sync';
+import { stringify } from 'csv-stringify/sync';
 
 // TypeScript types for payment operations
 interface PaymentOperation {
@@ -10,10 +11,10 @@ interface PaymentOperation {
     DATE: string; // e.g., "June 29, 2025, 2:30 p.m."
 }
 
-interface CoinGeckoResponse {
-    [key: string]: {
-        eur: number;
-    };
+interface TransactionWithEuroValue extends PaymentOperation {
+    euroValue: number;
+    originalAmount: number;
+    currency: string;
 }
 
 // Function to extract currency from amount string
@@ -72,6 +73,8 @@ async function main() {
         console.log(`Successfully read CSV file: ${csvFilePath}`);
         console.log(`Number of records: ${records.length}`);
         
+        const transactionsWithEuroValues: TransactionWithEuroValue[] = [];
+        
         // Process each transaction
         for (let i = 0; i < records.length; i++) {
             const record = records[i];
@@ -80,17 +83,46 @@ async function main() {
             
             console.log(`\nProcessing transaction ${i + 1}/${records.length}:`);
             console.log(`  Type: ${record.TYPE}`);
-            console.log(`  Amount: ${amount} – ${currency}`);
+            console.log(`  Amount: ${amount} ${currency}`);
             console.log(`  Date: ${record.DATE}`);
             
             const euroValue = await getEuroValue(currency, amount, record.DATE);
             console.log(`  Euro Value: €${euroValue.toFixed(2)}`);
+            
+            // Store the transaction with Euro value
+            transactionsWithEuroValues.push({
+                ...record,
+                euroValue,
+                originalAmount: amount,
+                currency
+            });
             
             // Add a small delay to avoid rate limiting
             if (i < records.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
+        
+        // Generate output CSV using csv-stringify
+        const csvData = transactionsWithEuroValues.map(t => ({
+            TYPE: t.TYPE,
+            ACCOUNT: t.ACCOUNT,
+            AMOUNT: t.originalAmount,
+            CURRENCY: t.currency,
+            DATE: t.DATE,
+            EURO_VALUE: t.euroValue.toFixed(2)
+        }));
+        
+        const outputCSV = stringify(csvData, { header: true });
+        const outputFileName = 'transactions_with_euro_values.csv';
+        writeFileSync(outputFileName, outputCSV, 'utf-8');
+        
+        console.log(`\n✅ CSV file generated: ${outputFileName}`);
+        console.log(`📊 Total transactions processed: ${transactionsWithEuroValues.length}`);
+        
+        // Calculate totals
+        const totalEuroValue = transactionsWithEuroValues.reduce((sum, t) => sum + t.euroValue, 0);
+        console.log(`💰 Total Euro value: €${totalEuroValue.toFixed(2)}`);
         
     } catch (error) {
         console.error('Error reading CSV file:', (error as Error).message);
