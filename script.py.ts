@@ -102,13 +102,13 @@ async function main() {
         }
         
         // Generate output CSV using csv-stringify
-        const csvData = transactionsWithEuroValues.map(t => ({
+        const csvData = transactionsWithEuroValues.reverse().map(t => ({
             TYPE: t.TYPE,
             ACCOUNT: t.ACCOUNT,
             AMOUNT: t.originalAmount,
             CURRENCY: t.currency,
             DATE: t.DATE,
-            EURO_VALUE: t.euroValue.toFixed(2)
+            EURO_VALUE: t.euroValue.toFixed(2).replace('.', ',')
         }));
         
         const outputCSV = stringify(csvData, { header: true });
