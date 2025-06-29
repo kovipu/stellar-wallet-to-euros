@@ -44,6 +44,9 @@ async function getEuroValue(currency: string, amount: number, datetime: string):
         return data.rates.EUR;
     }
     if (currency === 'XLM') {
+        if (amount < 0.01) {
+            return 0;
+        }
         const date = `${day}-${month}-${year}`
         const response = await fetch(`https://api.coingecko.com/api/v3/coins/stellar/history?date=${date}`);
         const data = await response.json();
@@ -81,13 +84,8 @@ async function main() {
             const currency = extractCurrency(record.AMOUNT);
             const amount = extractAmount(record.AMOUNT);
             
-            console.log(`\nProcessing transaction ${i + 1}/${records.length}:`);
-            console.log(`  Type: ${record.TYPE}`);
-            console.log(`  Amount: ${amount} ${currency}`);
-            console.log(`  Date: ${record.DATE}`);
-            
+            console.log(`Processing transaction ${i + 1}/${records.length}`);
             const euroValue = await getEuroValue(currency, amount, record.DATE);
-            console.log(`  Euro Value: €${euroValue.toFixed(2)}`);
             
             // Store the transaction with Euro value
             transactionsWithEuroValues.push({
@@ -99,7 +97,7 @@ async function main() {
             
             // Add a small delay to avoid rate limiting
             if (i < records.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
