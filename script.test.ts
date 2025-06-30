@@ -1,0 +1,80 @@
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { processTransactions } from "./script.py.js";
+
+describe("processTransactions", () => {
+  beforeEach(() => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("coingecko")) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              market_data: { current_price: { eur: 0.1 } },
+            }),
+        } as Response);
+      }
+      if (url.includes("frankfurter")) {
+        return Promise.resolve({
+          json: () => Promise.resolve({ rates: { EUR: 0.9 } }),
+        } as Response);
+      }
+      return Promise.resolve({
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should process a mix of create_account and payment operations", async () => {
+    const accountId =
+      "GC7GSO435QLS37J4Y2JX42TEALN5WFR2TWR62BGM6L6Z65OD32L3GTWH";
+
+    const mockOperations: any = [
+      {
+        type: "create_account",
+        starting_balance: "1000.0000000",
+        created_at: "2024-01-01T00:00:00Z",
+        funder: "GBX...",
+      },
+      {
+        type: "payment",
+        from: accountId,
+        to: "GAZ...",
+        amount: "100.0000000",
+        asset_type: "native",
+        created_at: "2024-01-02T00:00:00Z",
+      },
+      {
+        type: "payment",
+        from: "GAZ...",
+        to: accountId,
+        amount: "50.0000000",
+        asset_type: "credit_alphanum4",
+        asset_code: "USDC",
+        created_at: "2024-01-03T00:00:00Z",
+      },
+    ];
+    const result = await processTransactions(mockOperations, accountId, {});
+
+    expect(result).toHaveLength(3);
+
+    // create_account assertion
+    expect(result[0].TYPE).toBe("received");
+    expect(result[0].originalAmount).toBe(1000);
+    expect(result[0].euroValue).toBe(100);
+
+    // sent payment assertion
+    expect(result[1].TYPE).toBe("sent");
+    expect(result[1].originalAmount).toBe(100);
+    expect(result[1].euroValue).toBe(10);
+
+    // received payment assertion
+    expect(result[2].TYPE).toBe("received");
+    expect(result[2].originalAmount).toBe(50);
+    expect(result[2].euroValue).toBe(45);
+  });
+});

@@ -65,16 +65,6 @@ function isCacheValid(entry: CacheEntry): boolean {
   return Date.now() - entry.timestamp < maxAge;
 }
 
-// Function to extract currency from amount string
-function extractCurrency(amount: string): string {
-  return amount.trim().split(" ")[1];
-}
-
-// Function to extract numeric amount from amount string
-function extractAmount(amount: string): number {
-  return parseFloat(amount.trim().split(" ")[0]);
-}
-
 // Function to fetch Euro value from CoinGecko with caching
 async function getEuroValue(
   currency: string,
@@ -144,7 +134,7 @@ export async function processTransactions(
         TYPE: isSent ? "sent" : "received",
         ACCOUNT: isSent ? p.to : p.from,
         AMOUNT: p.amount,
-        CURRENCY: p.asset_type === "native" ? "XLM" : p.asset_code,
+        CURRENCY: p.asset_type === "native" ? "XLM" : p.asset_code!,
         DATE: p.created_at,
       };
     } else {
@@ -163,8 +153,8 @@ export async function processTransactions(
 
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
-    const currency = extractCurrency(record.AMOUNT);
-    const amount = extractAmount(record.AMOUNT);
+    const currency = record.CURRENCY;
+    const amount = parseFloat(record.AMOUNT);
 
     console.log(`Processing transaction ${i + 1}/${records.length}`);
     const euroValue = await getEuroValue(currency, amount, record.DATE, cache);
@@ -180,15 +170,14 @@ export async function processTransactions(
   return transactionsWithEuroValues;
 }
 
-// Get account ID from command line arguments
-const accountId = process.argv[2];
-
-if (!accountId) {
-  console.error("Usage: tsx script.py.ts <stellar-account-id>");
-  process.exit(1);
-}
-
 async function main() {
+  const accountId = process.argv[2];
+
+  if (!accountId) {
+    console.error("Usage: tsx script.py.ts <stellar-account-id>");
+    process.exit(1);
+  }
+
   const cache = loadCache();
   console.log(`Loaded price cache with ${Object.keys(cache).length} entries.`);
 
@@ -236,4 +225,6 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}

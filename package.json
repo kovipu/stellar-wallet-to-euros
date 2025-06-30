@@ -6,10 +6,12 @@
     "csv-stringify": "^6.5.2",
     "prettier": "^3.6.2",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "start": "tsx script.py.ts",
-    "format": "prettier --write *.ts"
+    "format": "prettier --write *.ts",
+    "test": "vitest"
   }
 }
