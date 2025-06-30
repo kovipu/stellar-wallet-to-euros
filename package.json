@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@stellar/stellar-sdk": "^13.3.0",
     "@types/node": "^24.0.7",
     "csv-parse": "^5.6.0",
     "csv-stringify": "^6.5.2",
