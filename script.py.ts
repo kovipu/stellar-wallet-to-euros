@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
@@ -17,6 +17,56 @@ interface TransactionWithEuroValue extends PaymentOperation {
     currency: string;
 }
 
+interface CacheEntry {
+    date: string;
+    currency: string;
+    price: number;
+    timestamp: number;
+}
+
+interface CacheData {
+    [key: string]: CacheEntry;
+}
+
+// Cache file path
+const CACHE_FILE = 'coingecko_cache.json';
+
+// Function to load cache from file
+function loadCache(): CacheData {
+    if (existsSync(CACHE_FILE)) {
+        try {
+            const cacheData = readFileSync(CACHE_FILE, 'utf-8');
+            return JSON.parse(cacheData);
+        } catch (error) {
+            console.warn('Failed to load cache, starting fresh');
+            return {};
+        }
+    }
+    return {};
+}
+
+// Function to save cache to file
+function saveCache(cache: CacheData): void {
+    try {
+        writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+    } catch (error) {
+        console.warn('Failed to save cache:', (error as Error).message);
+    }
+}
+
+// Function to get cache key
+function getCacheKey(currency: string, date: string): string {
+    return `${currency}_${date}`;
+}
+
+// Function to check if cache entry is still valid (24 hours)
+function isCacheValid(entry: CacheEntry): boolean {
+    const now = Date.now();
+    const cacheAge = now - entry.timestamp;
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    return cacheAge < maxAge;
+}
+
 // Function to extract currency from amount string
 function extractCurrency(amount: string): string {
     const parts = amount.trim().split(' ');
@@ -29,12 +79,12 @@ function extractAmount(amount: string): number {
     return parseFloat(parts[0]);
 }
 
-// Function to fetch Euro value from CoinGecko
-async function getEuroValue(currency: string, amount: number, datetime: string): Promise<number> {
+// Function to fetch Euro value from CoinGecko with caching
+async function getEuroValue(currency: string, amount: number, datetime: string, cache: CacheData): Promise<number> {
     const normalized = datetime.replace('p.m.', 'PM').replace('a.m.', 'AM');
     const date = new Date(normalized);
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0'); // getMonth() returns 0-11
+    const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
 
     if (currency === 'USDC') {
@@ -43,14 +93,34 @@ async function getEuroValue(currency: string, amount: number, datetime: string):
         const data = await response.json();
         return data.rates.EUR;
     }
+    
     if (currency === 'XLM') {
         if (amount < 0.01) {
             return 0;
         }
-        const date = `${day}-${month}-${year}`
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/stellar/history?date=${date}`);
+        const dateStr = `${day}-${month}-${year}`;
+        const cacheKey = getCacheKey(currency, dateStr);
+        
+        // Check cache first
+        if (cache[cacheKey] && isCacheValid(cache[cacheKey])) {
+            console.log(`  Using cached XLM rate for ${dateStr}`);
+            return cache[cacheKey].price * amount;
+        }
+        
+        // Fetch from API
+        console.log(`  Fetching XLM rate for ${dateStr}`);
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/stellar/history?date=${dateStr}`);
         const data = await response.json();
         const eurPrice = data.market_data.current_price.eur;
+        
+        // Cache the result
+        cache[cacheKey] = {
+            date: dateStr,
+            currency,
+            price: eurPrice,
+            timestamp: Date.now()
+        };
+        
         return eurPrice * amount;
     }
     return 0;
@@ -65,7 +135,12 @@ if (!csvFilePath) {
 }
 
 async function main() {
+    // Load cache
+    const cache = loadCache();
+    console.log(`Loaded cache with ${Object.keys(cache).length} entries`);
+
     try {
+        
         // Read and parse the CSV file
         const fileContent = readFileSync(csvFilePath, 'utf-8');
         const records: PaymentOperation[] = parse(fileContent, {
@@ -85,7 +160,7 @@ async function main() {
             const amount = extractAmount(record.AMOUNT);
             
             console.log(`Processing transaction ${i + 1}/${records.length}`);
-            const euroValue = await getEuroValue(currency, amount, record.DATE);
+            const euroValue = await getEuroValue(currency, amount, record.DATE, cache);
             
             // Store the transaction with Euro value
             transactionsWithEuroValues.push({
@@ -123,9 +198,12 @@ async function main() {
         console.log(`💰 Total Euro value: €${totalEuroValue.toFixed(2)}`);
         
     } catch (error) {
-        console.error('Error reading CSV file:', (error as Error).message);
-        process.exit(1);
+        console.error('Error:', (error as Error).message);
     }
+
+    // Save updated cache
+    saveCache(cache);
+    console.log(`Saved cache with ${Object.keys(cache).length} entries`);
 }
 
 main();

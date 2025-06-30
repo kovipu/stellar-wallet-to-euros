@@ -2,3 +2,4 @@ dataset
 *.csv
 node_modules
 .env
+coingecko_cache.json
