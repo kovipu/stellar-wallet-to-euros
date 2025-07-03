@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { processTransactions } from "./script.py.js";
+import { Horizon } from "@stellar/stellar-sdk";
 
 describe("processTransactions", () => {
   beforeEach(() => {
@@ -30,8 +31,7 @@ describe("processTransactions", () => {
   });
 
   it("should process a mix of create_account and payment operations", async () => {
-    const accountId =
-      "GC7GSO435QLS37J4Y2JX42TEALN5WFR2TWR62BGM6L6Z65OD32L3GTWH";
+    const accountId = "GC7...";
 
     const mockOperations: any = [
       {
@@ -79,7 +79,7 @@ describe("processTransactions", () => {
   });
 
   it("should process path_payment_strict_send operations", async () => {
-    const accountId = "GC7GSO435QLS37J4Y2JX42TEALN5WFR2TWR62BGM6L6Z65OD32L3GTWH";
+    const accountId = "GC7...";
 
     const mockOperations: any = [
       {
@@ -124,7 +124,7 @@ describe("processTransactions", () => {
   });
 
   it("should process path_payment_strict_receive operations", async () => {
-    const accountId = "GC7GSO435QLS37J4Y2JX42TEALN5WFR2TWR62BGM6L6Z65OD32L3GTWH";
+    const accountId = "GC7...";
 
     const mockOperations: any = [
       {
@@ -187,5 +187,51 @@ describe("processTransactions", () => {
     expect(result[1].TYPE).toBe("path_payment_received");
     expect(result[1].originalAmount).toBe(30); // 30 USDC received
     expect(result[1].euroValue).toBe(27); // 30 * 0.9
+  });
+
+  it("Handle Blend deposit", async () => {
+    const accountId = "GC7...";
+    const blendDeposit = {
+      transaction_successful: true,
+      source_account: accountId,
+      type: "invoke_host_function",
+      asset_balance_changes: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "EURC",
+          asset_issuer: "GDH...",
+          type: "transfer",
+          from: accountId,
+          to: "CAJ...",
+          amount: "820.7219053",
+        },
+      ],
+    } as Horizon.ServerApi.OperationRecord;
+
+    const result = await processTransactions([blendDeposit], accountId, {});
+    expect(result).toHaveLength(1);
+  });
+
+  it("Handle Blend withdraw", async () => {
+    const accountId = "GC7...";
+    const blendWithdraw = {
+      type: "invoke_host_function",
+      source_account: accountId,
+      created_at: "2024-01-08T00:00:00Z",
+      asset_balance_changes: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "EURC",
+          asset_issuer: "GDH...",
+          type: "transfer",
+          from: "CAJ...",
+          to: accountId,
+          amount: "5.0000000",
+        },
+      ],
+    } as Horizon.ServerApi.OperationRecord;
+
+    const result = await processTransactions([blendWithdraw], accountId, {});
+    expect(result).toHaveLength(1);
   });
 });
