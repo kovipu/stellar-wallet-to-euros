@@ -115,6 +115,8 @@ async function getEuroValue(
       price = data?.market_data?.current_price?.eur || 0;
       cache[cacheKey] = { price, timestamp: Date.now() };
     }
+  } else if (currency === "EURC") {
+    return amount;
   }
 
   return price * amount;

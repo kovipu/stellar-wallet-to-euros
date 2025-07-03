@@ -195,6 +195,7 @@ describe("processTransactions", () => {
       transaction_successful: true,
       source_account: accountId,
       type: "invoke_host_function",
+      created_at: "2024-01-09T00:00:00Z",
       asset_balance_changes: [
         {
           asset_type: "credit_alphanum4",
@@ -210,6 +211,15 @@ describe("processTransactions", () => {
 
     const result = await processTransactions([blendDeposit], accountId, {});
     expect(result).toHaveLength(1);
+    const tx = result[0];
+    expect(tx.TYPE).toBe("blend_deposit");
+    expect(tx.ACCOUNT).toBe("CAJ...");
+    expect(tx.AMOUNT).toBe("820.7219053");
+    expect(tx.CURRENCY).toBe("EURC");
+    expect(tx.originalAmount).toBeCloseTo(820.7219053);
+    // euroValue should be 820.7219053 for EURC
+    expect(tx.euroValue).toBeCloseTo(820.7219053);
+    expect(tx.DATE).toBe("2024-01-09T00:00:00Z");
   });
 
   it("Handle Blend withdraw", async () => {
@@ -233,5 +243,14 @@ describe("processTransactions", () => {
 
     const result = await processTransactions([blendWithdraw], accountId, {});
     expect(result).toHaveLength(1);
+    const tx = result[0];
+    expect(tx.TYPE).toBe("blend_withdraw");
+    expect(tx.ACCOUNT).toBe("CAJ...");
+    expect(tx.AMOUNT).toBe("5.0000000");
+    expect(tx.CURRENCY).toBe("EURC");
+    expect(tx.originalAmount).toBeCloseTo(5.0);
+    // euroValue should be 5 for EURC
+    expect(tx.euroValue).toBeCloseTo(5.0);
+    expect(tx.DATE).toBe("2024-01-08T00:00:00Z");
   });
 });
