@@ -63,19 +63,19 @@ describe("processTransactions", () => {
     expect(result).toHaveLength(3);
 
     // create_account
-    expect(result[0].TYPE).toBe("create_account");
-    expect(result[0].originalAmount).toBe(1000);
-    expect(result[0].euroValue).toBe(100);
+    expect(result[0].transactionType).toBe("create_account");
+    expect(result[0].amount).toBe("1000.0000000");
+    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(100);
 
     // sent payment
-    expect(result[1].TYPE).toBe("payment_sent");
-    expect(result[1].originalAmount).toBe(100);
-    expect(result[1].euroValue).toBe(10);
+    expect(result[1].transactionType).toBe("payment_sent");
+    expect(result[1].amount).toBe("100.0000000");
+    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(10);
 
     // received payment
-    expect(result[2].TYPE).toBe("payment_received");
-    expect(result[2].originalAmount).toBe(50);
-    expect(result[2].euroValue).toBe(45);
+    expect(result[2].transactionType).toBe("payment_received");
+    expect(result[2].amount).toBe("50.0000000");
+    expect(parseFloat(result[2].euroValue.replace(',', '.'))).toBeCloseTo(45);
   });
 
   it("should process path_payment_strict_send operations", async () => {
@@ -113,14 +113,14 @@ describe("processTransactions", () => {
     expect(result).toHaveLength(2);
 
     // Sent path payment assertion
-    expect(result[0].TYPE).toBe("path_payment_sent");
-    expect(result[0].originalAmount).toBe(10); // 10 USDC sent
-    expect(result[0].euroValue).toBe(9); // 10 * 0.9
+    expect(result[0].transactionType).toBe("path_payment_sent");
+    expect(result[0].amount).toBe("10.0000000"); // 10 USDC sent
+    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(9); // 10 * 0.9
 
     // Received path payment assertion
-    expect(result[1].TYPE).toBe("path_payment_received");
-    expect(result[1].originalAmount).toBe(20); // 20 USDC received
-    expect(result[1].euroValue).toBe(18); // 20 * 0.9
+    expect(result[1].transactionType).toBe("path_payment_received");
+    expect(result[1].amount).toBe("20.0000000"); // 20 USDC received
+    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(18); // 20 * 0.9
   });
 
   it("should process path_payment_strict_receive operations", async () => {
@@ -179,14 +179,14 @@ describe("processTransactions", () => {
     expect(result).toHaveLength(2);
 
     // Sent path payment assertion
-    expect(result[0].TYPE).toBe("path_payment_sent");
-    expect(result[0].originalAmount).toBe(5); // 5 USDC sent
-    expect(result[0].euroValue).toBe(4.5); // 5 * 0.9
+    expect(result[0].transactionType).toBe("path_payment_sent");
+    expect(result[0].amount).toBe("5.0000000"); // 5 USDC sent
+    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(4.5); // 5 * 0.9
 
     // Received path payment assertion
-    expect(result[1].TYPE).toBe("path_payment_received");
-    expect(result[1].originalAmount).toBe(30); // 30 USDC received
-    expect(result[1].euroValue).toBe(27); // 30 * 0.9
+    expect(result[1].transactionType).toBe("path_payment_received");
+    expect(result[1].amount).toBe("30.0000000"); // 30 USDC received
+    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(27); // 30 * 0.9
   });
 
   it("Handle Blend deposit", async () => {
@@ -212,14 +212,12 @@ describe("processTransactions", () => {
     const result = await processTransactions([blendDeposit], accountId, {});
     expect(result).toHaveLength(1);
     const tx = result[0];
-    expect(tx.TYPE).toBe("blend_deposit");
-    expect(tx.ACCOUNT).toBe("CAJ...");
-    expect(tx.AMOUNT).toBe("820.7219053");
-    expect(tx.CURRENCY).toBe("EURC");
-    expect(tx.originalAmount).toBeCloseTo(820.7219053);
-    // euroValue should be 820.7219053 for EURC
-    expect(tx.euroValue).toBeCloseTo(820.7219053);
-    expect(tx.DATE).toBe("2024-01-09T00:00:00Z");
+    expect(tx.transactionType).toBe("blend_deposit");
+    expect(tx.toAddress).toBe("CAJ...");
+    expect(tx.amount).toBe("820.7219053");
+    expect(tx.currency).toBe("EURC");
+    expect(parseFloat(tx.euroValue.replace(',', '.'))).toBeCloseTo(820.7219053);
+    expect(tx.timestamp).toBe("2024-01-09T00:00:00Z");
   });
 
   it("Handle Blend withdraw", async () => {
@@ -244,13 +242,11 @@ describe("processTransactions", () => {
     const result = await processTransactions([blendWithdraw], accountId, {});
     expect(result).toHaveLength(1);
     const tx = result[0];
-    expect(tx.TYPE).toBe("blend_withdraw");
-    expect(tx.ACCOUNT).toBe("CAJ...");
-    expect(tx.AMOUNT).toBe("5.0000000");
-    expect(tx.CURRENCY).toBe("EURC");
-    expect(tx.originalAmount).toBeCloseTo(5.0);
-    // euroValue should be 5 for EURC
-    expect(tx.euroValue).toBeCloseTo(5.0);
-    expect(tx.DATE).toBe("2024-01-08T00:00:00Z");
+    expect(tx.transactionType).toBe("blend_withdraw");
+    expect(tx.toAddress).toBe(accountId);
+    expect(tx.amount).toBe("5.0000000");
+    expect(tx.currency).toBe("EURC");
+    expect(parseFloat(tx.euroValue.replace(',', '.'))).toBeCloseTo(5.0);
+    expect(tx.timestamp).toBe("2024-01-08T00:00:00Z");
   });
 });

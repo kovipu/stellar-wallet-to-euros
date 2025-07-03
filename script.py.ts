@@ -5,8 +5,8 @@ import { Horizon } from "@stellar/stellar-sdk";
 const horizonServer = new Horizon.Server("https://horizon.stellar.org");
 
 // TypeScript types for payment operations
-interface PaymentOperation {
-  TYPE:
+interface WalletTransaction {
+  transactionType:
     | "create_account"
     | "payment_received"
     | "payment_sent"
@@ -14,16 +14,15 @@ interface PaymentOperation {
     | "path_payment_sent"
     | "blend_deposit"
     | "blend_withdraw";
-  ACCOUNT: string;
-  AMOUNT: string;
-  CURRENCY: string;
-  DATE: string;
+  fromAddress: string;
+  toAddress: string;
+  amount: string;
+  currency: string;
+  timestamp: string;
 }
 
-interface TransactionWithEuroValue extends PaymentOperation {
-  euroValue: number;
-  originalAmount: number;
-  currency: string;
+interface TransactionWithEuroValue extends WalletTransaction {
+  euroValue: string;
 }
 
 interface CacheEntry {
@@ -78,7 +77,7 @@ async function getEuroValue(
   amount: number,
   datetime: string,
   cache: CacheData,
-): Promise<number> {
+): Promise<string> {
   const date = new Date(datetime);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -101,7 +100,7 @@ async function getEuroValue(
       cache[cacheKey] = { price, timestamp: Date.now() };
     }
   } else if (currency === "XLM") {
-    if (amount < 0.01) return 0;
+    if (amount < 0.01) return "0";
     const dateStr = `${day}-${month}-${year}`;
     const cacheKey = getCacheKey(currency, dateStr);
 
@@ -118,10 +117,11 @@ async function getEuroValue(
       cache[cacheKey] = { price, timestamp: Date.now() };
     }
   } else if (currency === "EURC") {
-    return amount;
+    return amount.toFixed(2).replace(".", ",");
   }
 
-  return price * amount;
+  const value = price * amount;
+  return value.toFixed(2).replace(".", ",");
 }
 
 export async function processTransactions(
@@ -129,7 +129,7 @@ export async function processTransactions(
   accountId: string,
   cache: CacheData,
 ): Promise<TransactionWithEuroValue[]> {
-  const records: PaymentOperation[] = operations.flatMap((p) => {
+  const records: WalletTransaction[] = operations.flatMap((p) => {
     if (p.type === "payment") {
       const isSent = p.from === accountId;
 
@@ -138,75 +138,80 @@ export async function processTransactions(
 
       return [
         {
-          TYPE: isSent ? "payment_sent" : "payment_received",
-          ACCOUNT: isSent ? p.to : p.from,
-          AMOUNT: p.amount,
-          CURRENCY: p.asset_type === "native" ? "XLM" : p.asset_code!,
-          DATE: p.created_at,
+          transactionType: isSent ? "payment_sent" : "payment_received",
+          fromAddress: p.from,
+          toAddress: p.to,
+          amount: p.amount,
+          currency: p.asset_type === "native" ? "XLM" : p.asset_code!,
+          timestamp: p.created_at,
         },
       ];
     } else if (p.type === "create_account") {
       return [
         {
-          TYPE: "create_account",
-          ACCOUNT: p.funder,
-          AMOUNT: p.starting_balance,
-          CURRENCY: "XLM",
-          DATE: p.created_at,
+          transactionType: "create_account",
+          fromAddress: p.funder,
+          toAddress: accountId,
+          amount: p.starting_balance,
+          currency: "XLM",
+          timestamp: p.created_at,
         },
       ];
     } else if (p.type === "path_payment_strict_send") {
       const isSent = p.from === accountId;
       return [
         {
-          TYPE: isSent ? "path_payment_sent" : "path_payment_received",
-          ACCOUNT: isSent ? p.to : p.from,
-          AMOUNT: isSent ? p.source_amount : p.amount,
-          CURRENCY: isSent
+          transactionType: isSent ? "path_payment_sent" : "path_payment_received",
+          fromAddress: p.from,
+          toAddress: p.to,
+          amount: isSent ? p.source_amount : p.amount,
+          currency: isSent
             ? p.source_asset_type === "native"
               ? "XLM"
               : p.source_asset_code!
             : p.asset_type === "native"
               ? "XLM"
               : p.asset_code!,
-          DATE: p.created_at,
+          timestamp: p.created_at,
         },
       ];
     } else if (p.type === "path_payment_strict_receive") {
       const isSent = p.from === accountId;
       return [
         {
-          TYPE: isSent ? "path_payment_sent" : "path_payment_received",
-          ACCOUNT: isSent ? p.to : p.from,
-          AMOUNT: isSent ? p.source_amount : p.amount,
-          CURRENCY: isSent
+          transactionType: isSent ? "path_payment_sent" : "path_payment_received",
+          fromAccount: p.from,
+          toAccount: p.to,
+          amount: isSent ? p.source_amount : p.amount,
+          currency: isSent
             ? p.source_asset_type === "native"
               ? "XLM"
               : p.source_asset_code!
             : p.asset_type === "native"
               ? "XLM"
               : p.asset_code!,
-          DATE: p.created_at,
+          timestamp: p.created_at,
         },
       ];
     } else if (p.type === "invoke_host_function") {
       // Handle Blend deposit/withdrawal
       return p.asset_balance_changes
         .filter((change) => change.type === "transfer")
-        .flatMap((change): PaymentOperation[] => {
+        .flatMap((change): WalletTransaction[] => {
           const isDeposit = change.from === accountId;
           const isWithdraw = change.to === accountId;
           if (!isDeposit && !isWithdraw) return [];
           return [
             {
-              TYPE: isDeposit ? "blend_deposit" : "blend_withdraw",
-              ACCOUNT: isDeposit ? change.to : change.from,
-              AMOUNT: change.amount,
-              CURRENCY:
+              transactionType: isDeposit ? "blend_deposit" : "blend_withdraw",
+              fromAddress: change.from,
+              toAddress: change.to,
+              amount: change.amount,
+              currency:
                 change.asset_type === "native"
                   ? "XLM"
                   : change.asset_code || "",
-              DATE: p.created_at || "",
+              timestamp: p.created_at || "",
             },
           ];
         });
@@ -219,19 +224,17 @@ export async function processTransactions(
 
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
-    const currency = record.CURRENCY;
-    const amount = parseFloat(record.AMOUNT);
+    const currency = record.currency;
+    const amount = parseFloat(record.amount);
 
-    const euroValue = await getEuroValue(currency, amount, record.DATE, cache);
+    const euroValue = await getEuroValue(currency, amount, record.timestamp, cache);
 
     console.log(`Processing transaction ${i + 1}/${records.length}`);
-    console.log(`${record.TYPE}: ${amount} ${currency} ~= ${euroValue} €`);
+    console.log(`${record.transactionType}: ${amount} ${currency} ~= ${euroValue} €`);
 
     transactionsWithEuroValues.push({
       ...record,
       euroValue,
-      originalAmount: amount,
-      currency,
     });
     await new Promise((resolve) => setTimeout(resolve, 100)); // Rate limit APIs
   }
@@ -264,27 +267,11 @@ async function main() {
       cache,
     );
 
-    const csvData = transactionsWithEuroValues.reverse().map((t) => ({
-      TYPE: t.TYPE,
-      ACCOUNT: t.ACCOUNT,
-      AMOUNT: t.originalAmount,
-      CURRENCY: t.CURRENCY,
-      DATE: t.DATE,
-      EURO_VALUE: t.euroValue.toFixed(2).replace(".", ","),
-    }));
-
-    const outputCSV = stringify(csvData, { header: true });
+    const outputCSV = stringify(transactionsWithEuroValues.reverse(), { header: true });
     const outputFileName = "transactions_with_euro_values.csv";
     writeFileSync(outputFileName, outputCSV, "utf-8");
 
     console.log(`\n✅ CSV file generated: ${outputFileName}`);
-    const totalEuroValue = transactionsWithEuroValues.reduce(
-      (sum, t) => sum + t.euroValue,
-      0,
-    );
-    console.log(
-      `💰 Total Euro value of transactions: €${totalEuroValue.toFixed(2).replace(".", ",")}`,
-    );
   } catch (error) {
     console.error("Error:", (error as Error).message);
   } finally {
