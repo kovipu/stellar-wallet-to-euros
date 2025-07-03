@@ -112,7 +112,9 @@ async function getEuroValue(
         `https://api.coingecko.com/api/v3/coins/stellar/history?date=${dateStr}`,
       );
       const data = await response.json();
-      price = data?.market_data?.current_price?.eur || 0;
+      if (!data?.market_data?.current_price?.eur)
+        throw Error("CoinGecko query failed. Probably rate limited.");
+      price = data.market_data.current_price.eur;
       cache[cacheKey] = { price, timestamp: Date.now() };
     }
   } else if (currency === "EURC") {
@@ -216,8 +218,10 @@ export async function processTransactions(
     const currency = record.CURRENCY;
     const amount = parseFloat(record.AMOUNT);
 
-    console.log(`Processing transaction ${i + 1}/${records.length}`);
     const euroValue = await getEuroValue(currency, amount, record.DATE, cache);
+
+    console.log(`Processing transaction ${i + 1}/${records.length}`);
+    console.log(`${record.TYPE}: ${amount} ${currency} ~= ${euroValue} €`);
 
     transactionsWithEuroValues.push({
       ...record,
