@@ -65,17 +65,17 @@ describe("processTransactions", () => {
     // create_account
     expect(result[0].transactionType).toBe("create_account");
     expect(result[0].amount).toBe("1000.0000000");
-    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(100);
+    expect(parseFloat(result[0].euroValue.replace(",", "."))).toBeCloseTo(100);
 
     // sent payment
     expect(result[1].transactionType).toBe("payment_sent");
     expect(result[1].amount).toBe("100.0000000");
-    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(10);
+    expect(parseFloat(result[1].euroValue.replace(",", "."))).toBeCloseTo(10);
 
     // received payment
     expect(result[2].transactionType).toBe("payment_received");
     expect(result[2].amount).toBe("50.0000000");
-    expect(parseFloat(result[2].euroValue.replace(',', '.'))).toBeCloseTo(45);
+    expect(parseFloat(result[2].euroValue.replace(",", "."))).toBeCloseTo(45);
   });
 
   it("should process path_payment_strict_send operations", async () => {
@@ -115,12 +115,12 @@ describe("processTransactions", () => {
     // Sent path payment assertion
     expect(result[0].transactionType).toBe("path_payment_sent");
     expect(result[0].amount).toBe("10.0000000"); // 10 USDC sent
-    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(9); // 10 * 0.9
+    expect(parseFloat(result[0].euroValue.replace(",", "."))).toBeCloseTo(9); // 10 * 0.9
 
     // Received path payment assertion
     expect(result[1].transactionType).toBe("path_payment_received");
     expect(result[1].amount).toBe("20.0000000"); // 20 USDC received
-    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(18); // 20 * 0.9
+    expect(parseFloat(result[1].euroValue.replace(",", "."))).toBeCloseTo(18); // 20 * 0.9
   });
 
   it("should process path_payment_strict_receive operations", async () => {
@@ -153,27 +153,6 @@ describe("processTransactions", () => {
       },
     ];
 
-    const fetchMock = vi.fn((url: string) => {
-      if (url.includes("coingecko")) {
-        return Promise.resolve({
-          json: () =>
-            Promise.resolve({
-              market_data: { current_price: { eur: 0.1 } }, // XLM to EUR
-            }),
-        } as Response);
-      }
-      if (url.includes("frankfurter")) {
-        return Promise.resolve({
-          json: () => Promise.resolve({ rates: { EUR: 0.9 } }), // USD to EUR
-        } as Response);
-      }
-      return Promise.resolve({
-        json: () => Promise.resolve({}),
-      } as Response);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
     const result = await processTransactions(mockOperations, accountId, {});
 
     expect(result).toHaveLength(2);
@@ -181,12 +160,12 @@ describe("processTransactions", () => {
     // Sent path payment assertion
     expect(result[0].transactionType).toBe("path_payment_sent");
     expect(result[0].amount).toBe("5.0000000"); // 5 USDC sent
-    expect(parseFloat(result[0].euroValue.replace(',', '.'))).toBeCloseTo(4.5); // 5 * 0.9
+    expect(parseFloat(result[0].euroValue.replace(",", "."))).toBeCloseTo(4.5); // 5 * 0.9
 
     // Received path payment assertion
     expect(result[1].transactionType).toBe("path_payment_received");
     expect(result[1].amount).toBe("30.0000000"); // 30 USDC received
-    expect(parseFloat(result[1].euroValue.replace(',', '.'))).toBeCloseTo(27); // 30 * 0.9
+    expect(parseFloat(result[1].euroValue.replace(",", "."))).toBeCloseTo(27); // 30 * 0.9
   });
 
   it("Handle Blend deposit", async () => {
@@ -216,7 +195,7 @@ describe("processTransactions", () => {
     expect(tx.toAddress).toBe("CAJ...");
     expect(tx.amount).toBe("820.7219053");
     expect(tx.currency).toBe("EURC");
-    expect(parseFloat(tx.euroValue.replace(',', '.'))).toBeCloseTo(820.7219053);
+    expect(parseFloat(tx.euroValue.replace(",", "."))).toBeCloseTo(820.7219053);
     expect(tx.timestamp).toBe("2024-01-09T00:00:00Z");
   });
 
@@ -246,7 +225,7 @@ describe("processTransactions", () => {
     expect(tx.toAddress).toBe(accountId);
     expect(tx.amount).toBe("5.0000000");
     expect(tx.currency).toBe("EURC");
-    expect(parseFloat(tx.euroValue.replace(',', '.'))).toBeCloseTo(5.0);
+    expect(parseFloat(tx.euroValue.replace(",", "."))).toBeCloseTo(5.0);
     expect(tx.timestamp).toBe("2024-01-08T00:00:00Z");
   });
 });

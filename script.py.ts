@@ -161,7 +161,9 @@ export async function processTransactions(
       const isSent = p.from === accountId;
       return [
         {
-          transactionType: isSent ? "path_payment_sent" : "path_payment_received",
+          transactionType: isSent
+            ? "path_payment_sent"
+            : "path_payment_received",
           fromAddress: p.from,
           toAddress: p.to,
           amount: isSent ? p.source_amount : p.amount,
@@ -179,7 +181,9 @@ export async function processTransactions(
       const isSent = p.from === accountId;
       return [
         {
-          transactionType: isSent ? "path_payment_sent" : "path_payment_received",
+          transactionType: isSent
+            ? "path_payment_sent"
+            : "path_payment_received",
           fromAccount: p.from,
           toAccount: p.to,
           amount: isSent ? p.source_amount : p.amount,
@@ -227,10 +231,17 @@ export async function processTransactions(
     const currency = record.currency;
     const amount = parseFloat(record.amount);
 
-    const euroValue = await getEuroValue(currency, amount, record.timestamp, cache);
+    const euroValue = await getEuroValue(
+      currency,
+      amount,
+      record.timestamp,
+      cache,
+    );
 
     console.log(`Processing transaction ${i + 1}/${records.length}`);
-    console.log(`${record.transactionType}: ${amount} ${currency} ~= ${euroValue} €`);
+    console.log(
+      `${record.transactionType}: ${amount} ${currency} ~= ${euroValue} €`,
+    );
 
     transactionsWithEuroValues.push({
       ...record,
@@ -267,7 +278,9 @@ async function main() {
       cache,
     );
 
-    const outputCSV = stringify(transactionsWithEuroValues.reverse(), { header: true });
+    const outputCSV = stringify(transactionsWithEuroValues.reverse(), {
+      header: true,
+    });
     const outputFileName = "transactions_with_euro_values.csv";
     writeFileSync(outputFileName, outputCSV, "utf-8");
 
