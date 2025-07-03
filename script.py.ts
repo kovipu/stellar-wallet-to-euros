@@ -132,6 +132,10 @@ export async function processTransactions(
   const records: PaymentOperation[] = operations.flatMap((p) => {
     if (p.type === "payment") {
       const isSent = p.from === accountId;
+
+      // Remove dusting attacks.
+      if (!isSent && parseFloat(p.amount) < 0.0001) return [];
+
       return [
         {
           TYPE: isSent ? "payment_sent" : "payment_received",
