@@ -6,7 +6,7 @@ const horizonServer = new Horizon.Server("https://horizon.stellar.org");
 
 // TypeScript types for payment operations
 interface PaymentOperation {
-  TYPE: "received" | "sent";
+  TYPE: "create_account" | "payment_received" | "payment_sent" | "path_payment_received" | "path_payment_sent";
   ACCOUNT: string;
   AMOUNT: string;
   CURRENCY: string;
@@ -118,34 +118,49 @@ export async function processTransactions(
   accountId: string,
   cache: CacheData,
 ): Promise<TransactionWithEuroValue[]> {
-  const payments = operations.filter(
-    (
-      op,
-    ): op is
-      | Horizon.ServerApi.PaymentOperationRecord
-      | Horizon.ServerApi.CreateAccountOperationRecord =>
-      op.type === "payment" || op.type === "create_account",
-  );
-
-  const records: PaymentOperation[] = payments.map((p) => {
+  const records: PaymentOperation[] = operations.map((p) => {
     if (p.type === "payment") {
       const isSent = p.from === accountId;
       return {
-        TYPE: isSent ? "sent" : "received",
+        TYPE: isSent ? "payment_sent" : "payment_received",
         ACCOUNT: isSent ? p.to : p.from,
         AMOUNT: p.amount,
         CURRENCY: p.asset_type === "native" ? "XLM" : p.asset_code!,
         DATE: p.created_at,
       };
-    } else {
+    } else if (p.type === 'create_account') {
       return {
-        TYPE: "received",
+        TYPE: "create_account",
         ACCOUNT: p.funder,
         AMOUNT: p.starting_balance,
         CURRENCY: "XLM",
         DATE: p.created_at,
       };
+    } else if (p.type === 'path_payment_strict_send') {
+        const isSent = p.from === accountId;
+        return {
+          TYPE: isSent ? "path_payment_sent" : "path_payment_received",
+          ACCOUNT: isSent ? p.to : p.from,
+          AMOUNT: isSent ? p.source_amount : p.amount,
+          CURRENCY: isSent
+              ? (p.source_asset_type === "native" ? "XLM" : p.source_asset_code!)
+              : (p.asset_type === "native" ? "XLM" : p.asset_code!),
+          DATE: p.created_at,
+        }
+    } else if (p.type === 'path_payment_strict_receive') {
+        const isSent = p.from === accountId;
+        return {
+          TYPE: isSent ? "path_payment_sent" : "path_payment_received",
+          ACCOUNT: isSent ? p.to : p.from,
+          AMOUNT: isSent ? p.source_amount : p.amount,
+          CURRENCY: isSent
+              ? (p.source_asset_type === "native" ? "XLM" : p.source_asset_code!)
+              : (p.asset_type === "native" ? "XLM" : p.asset_code!),
+          DATE: p.created_at,
+        }
     }
+
+    throw Error(`Unsupported transaction type: ${p.type}`)
   });
 
   console.log(`Processing ${records.length} payment transactions.`);
