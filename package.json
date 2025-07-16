@@ -10,8 +10,8 @@
     "vitest": "^3.2.4"
   },
   "scripts": {
-    "start": "tsx script.py.ts",
-    "format": "prettier --write *.ts",
+    "start": "tsx src/fifo.ts",
+    "format": "prettier --write src/*.ts",
     "test": "vitest"
   }
 }

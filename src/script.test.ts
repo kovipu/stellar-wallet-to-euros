@@ -228,4 +228,42 @@ describe("processTransactions", () => {
     expect(parseFloat(tx.euroValue.replace(",", "."))).toBeCloseTo(5.0);
     expect(tx.timestamp).toBe("2024-01-08T00:00:00Z");
   });
+
+  it("Handle swap with a path", async () => {
+    const accountId = "GC7...";
+    const swap = {
+      transaction_successful: true,
+      source_account: accountId,
+      type: "path_payment_strict_send",
+      created_at: "2025-06-29T17:47:39Z",
+      transaction_hash: "38ee...",
+      asset_type: "credit_alphanum12",
+      asset_code: "yUSDC",
+      asset_issuer: "GDG...",
+      from: accountId,
+      to: "GAB...",
+      amount: "0.0118384",
+      path: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "USDC",
+          asset_issuer: "GA5...",
+        },
+      ],
+      source_amount: "0.0101149",
+      destination_min: "0.0000001",
+      source_asset_type: "credit_alphanum4",
+      source_asset_code: "EURC",
+      source_asset_issuer: "GDH...",
+    } as Horizon.ServerApi.OperationRecord;
+
+    const result = await processTransactions([swap], accountId, {});
+    expect(result).toHaveLength(1);
+    const tx = result[0];
+    expect(tx.transactionType).toBe("swap");
+    expect(tx.fromAddress).toBe(accountId);
+    expect(tx.toAddress).toBe("GAB...");
+    expect(tx.amount).toBe("0.0118384");
+    expect(tx.currency).toBe("USDC");
+  });
 });

@@ -13,12 +13,19 @@ interface WalletTransaction {
     | "path_payment_received"
     | "path_payment_sent"
     | "blend_deposit"
-    | "blend_withdraw";
+    | "blend_withdraw"
+    | "swap"
+    | "swap_fee";
   fromAddress: string;
   toAddress: string;
   amount: string;
   currency: string;
   timestamp: string;
+  // For swaps
+  sentAmount?: string;
+  sentCurrency?: string;
+  receivedAmount?: string;
+  receivedCurrency?: string;
 }
 
 interface TransactionWithEuroValue extends WalletTransaction {
@@ -157,46 +164,59 @@ export async function processTransactions(
           timestamp: p.created_at,
         },
       ];
-    } else if (p.type === "path_payment_strict_send") {
+    } else if (
+      p.type === "path_payment_strict_send" ||
+      p.type === "path_payment_strict_receive"
+    ) {
+      // Detect swap: from asset != to asset
       const isSent = p.from === accountId;
-      return [
-        {
-          transactionType: isSent
-            ? "path_payment_sent"
-            : "path_payment_received",
-          fromAddress: p.from,
-          toAddress: p.to,
-          amount: isSent ? p.source_amount : p.amount,
-          currency: isSent
-            ? p.source_asset_type === "native"
-              ? "XLM"
-              : p.source_asset_code!
-            : p.asset_type === "native"
-              ? "XLM"
-              : p.asset_code!,
-          timestamp: p.created_at,
-        },
-      ];
-    } else if (p.type === "path_payment_strict_receive") {
-      const isSent = p.from === accountId;
-      return [
-        {
-          transactionType: isSent
-            ? "path_payment_sent"
-            : "path_payment_received",
-          fromAccount: p.from,
-          toAccount: p.to,
-          amount: isSent ? p.source_amount : p.amount,
-          currency: isSent
-            ? p.source_asset_type === "native"
-              ? "XLM"
-              : p.source_asset_code!
-            : p.asset_type === "native"
-              ? "XLM"
-              : p.asset_code!,
-          timestamp: p.created_at,
-        },
-      ];
+      const sentAmount = isSent ? p.source_amount : p.amount;
+      const sentCurrency = isSent
+        ? p.source_asset_type === "native"
+          ? "XLM"
+          : p.source_asset_code!
+        : p.asset_type === "native"
+          ? "XLM"
+          : p.asset_code!;
+      const receivedAmount = isSent ? p.amount : p.source_amount;
+      const receivedCurrency = isSent
+        ? p.asset_type === "native"
+          ? "XLM"
+          : p.asset_code!
+        : p.source_asset_type === "native"
+          ? "XLM"
+          : p.source_asset_code!;
+      if (sentCurrency !== receivedCurrency) {
+        // It's a swap
+        return [
+          {
+            transactionType: p.from === p.to ? "swap" : "swap_fee",
+            fromAddress: p.from,
+            toAddress: p.to,
+            amount: sentAmount, // for compatibility
+            currency: sentCurrency,
+            timestamp: p.created_at,
+            sentAmount,
+            sentCurrency,
+            receivedAmount,
+            receivedCurrency,
+          },
+        ];
+      } else {
+        // Fallback to old logic
+        return [
+          {
+            transactionType: isSent
+              ? "path_payment_sent"
+              : "path_payment_received",
+            fromAddress: p.from,
+            toAddress: p.to,
+            amount: sentAmount,
+            currency: sentCurrency,
+            timestamp: p.created_at,
+          },
+        ];
+      }
     } else if (p.type === "invoke_host_function") {
       // Handle Blend deposit/withdrawal
       return p.asset_balance_changes
@@ -220,7 +240,7 @@ export async function processTransactions(
           ];
         });
     }
-    return [];
+    throw Error(`unknown transaction type: ${p.type}`);
   });
 
   console.log(`Processing ${records.length} payment transactions.`);
@@ -269,7 +289,7 @@ async function main() {
       .payments()
       .forAccount(accountId)
       .limit(200)
-      .order("desc")
+      .order("asc")
       .call();
 
     const transactionsWithEuroValues = await processTransactions(
@@ -278,9 +298,46 @@ async function main() {
       cache,
     );
 
-    const outputCSV = stringify(transactionsWithEuroValues.reverse(), {
-      header: true,
-    });
+    const columns = [
+      "Type",
+      "From",
+      "To",
+      "Amount",
+      "Currency",
+      "Euro Value",
+      "Timestamp",
+      "Original Amount",
+      "Original Currency",
+    ];
+
+    const outputCSV = stringify(
+      transactionsWithEuroValues.map((t) => {
+        if (t.transactionType === "swap") {
+          return {
+            Type: "swap",
+            From: t.fromAddress,
+            To: t.toAddress,
+            Amount: t.receivedAmount,
+            Currency: t.receivedCurrency,
+            Timestamp: t.timestamp,
+            "Euro Value": t.euroValue,
+            "Original Amount": t.sentAmount,
+            "Original Currency": t.sentCurrency,
+          };
+        } else {
+          return {
+            Type: t.transactionType,
+            From: t.fromAddress,
+            To: t.toAddress,
+            Amount: t.amount,
+            Currency: t.currency,
+            Timestamp: t.timestamp,
+            "Euro Value": t.euroValue,
+          };
+        }
+      }),
+      { columns, header: true },
+    );
     const outputFileName = "transactions_with_euro_values.csv";
     writeFileSync(outputFileName, outputCSV, "utf-8");
 
