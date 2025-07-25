@@ -21,21 +21,21 @@ async function main() {
       .order("asc")
       .call();
 
-    // TODO: snapshot for testing.
-    const snapshot = transactions.slice(0, 4);
-
+    const snapshot = transactions.slice(0, 5);
     console.log(snapshot);
 
     const output = await processTransactions(snapshot, walletAddress);
-    exportToCsv(output);
+    exportToCsv(output, walletAddress);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   }
 }
 
 type Output = {
-  transactions: WalletTransaction[];
+  transactions: Transaction[];
 };
+
+type Transaction = WalletTransaction | SwapTransaction;
 
 type Currency = "XLM" | "USDC" | "EURC";
 
@@ -46,7 +46,6 @@ type WalletTransaction = {
     | "create_account"
     | "payment_received"
     | "payment_sent"
-    | "swap"
     | "swap_fee"
     | "blend_deposit"
     | "blend_withdraw";
@@ -54,6 +53,16 @@ type WalletTransaction = {
   toAddress: string;
   amountStroops: BigInt;
   currency: Currency;
+};
+
+type SwapTransaction = {
+  transactionHash: string;
+  date: Date;
+  type: "swap";
+  sourceAmountStroops: BigInt;
+  sourceCurrency: Currency;
+  destinationAmountStroops: BigInt;
+  destinationCurrency: Currency;
 };
 
 export async function processTransactions(
@@ -87,6 +96,23 @@ export async function processTransactions(
               tx.asset_type === "native" ? "XLM" : (tx.asset_code as Currency),
           });
           break;
+        case "path_payment_strict_send":
+          acc.transactions.push({
+            transactionHash: tx.transaction_hash,
+            date: new Date(tx.created_at),
+            type: "swap",
+            sourceAmountStroops: toStroops(tx.source_amount),
+            sourceCurrency:
+              tx.source_asset_type === "native"
+                ? "XLM"
+                : (tx.source_asset_code as Currency),
+            destinationAmountStroops: toStroops(tx.destination_min),
+            destinationCurrency:
+              tx.asset_type === "native" ? "XLM" : (tx.asset_code as Currency),
+          });
+          break;
+        default:
+          throw new Error(`Unknown transaction type: ${tx.type}`);
       }
       return acc;
     },
@@ -99,19 +125,48 @@ const toStroops = (amount: string): BigInt => {
   return BigInt(amount.replace(".", "").replace(",", ""));
 };
 
+const toDecimal = (amount: BigInt): string => {
+  const amountStr = amount.toString();
+  const decimalPart = amountStr.slice(-7);
+  const integerPart = amountStr.slice(0, -7);
+  return `${integerPart},${decimalPart}`;
+};
+
 const exportToCsv = (output: Output) => {
   const outputCsv = stringify(
-    output.transactions.map((tx) => ({
-      Date: tx.date.toISOString(),
-      Type: tx.type,
-      From: tx.fromAddress,
-      To: tx.toAddress,
-      Amount: tx.amountStroops,
-      Currency: tx.currency,
-    })),
+    output.transactions.map((tx) => {
+      if (tx.type === "swap") {
+        return {
+          Date: tx.date.toISOString(),
+          Type: tx.type,
+          Amount: toDecimal(tx.destinationAmountStroops),
+          Currency: tx.destinationCurrency,
+          SourceAmount: toDecimal(tx.sourceAmountStroops),
+          SourceCurrency: tx.sourceCurrency,
+        };
+      } else {
+        return {
+          Date: tx.date.toISOString(),
+          Type: tx.type,
+          Amount: toDecimal(tx.amountStroops),
+          Currency: tx.currency,
+          From: tx.fromAddress,
+          To: tx.toAddress,
+        };
+      }
+    }),
     {
       header: true,
-      columns: ["Date", "Type", "From", "To", "Amount", "Currency"],
+      columns: [
+        "Date",
+        "Type",
+        "Amount",
+        "Currency",
+        "SourceAmount",
+        "SourceCurrency",
+        "From",
+        "To",
+      ],
     },
   );
   console.log(outputCsv);

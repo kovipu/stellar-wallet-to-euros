@@ -113,12 +113,12 @@ describe("processTransactions", () => {
     expect(result).toHaveLength(2);
 
     // Sent path payment assertion
-    expect(result[0].transactionType).toBe("path_payment_sent");
+    expect(result[0].transactionType).toBe("swap_fee");
     expect(result[0].amount).toBe("10.0000000"); // 10 USDC sent
     expect(parseFloat(result[0].euroValue.replace(",", "."))).toBeCloseTo(9); // 10 * 0.9
 
     // Received path payment assertion
-    expect(result[1].transactionType).toBe("path_payment_received");
+    expect(result[1].transactionType).toBe("swap_fee");
     expect(result[1].amount).toBe("20.0000000"); // 20 USDC received
     expect(parseFloat(result[1].euroValue.replace(",", "."))).toBeCloseTo(18); // 20 * 0.9
   });
@@ -158,12 +158,12 @@ describe("processTransactions", () => {
     expect(result).toHaveLength(2);
 
     // Sent path payment assertion
-    expect(result[0].transactionType).toBe("path_payment_sent");
+    expect(result[0].transactionType).toBe("swap_fee");
     expect(result[0].amount).toBe("5.0000000"); // 5 USDC sent
     expect(parseFloat(result[0].euroValue.replace(",", "."))).toBeCloseTo(4.5); // 5 * 0.9
 
     // Received path payment assertion
-    expect(result[1].transactionType).toBe("path_payment_received");
+    expect(result[1].transactionType).toBe("swap_fee");
     expect(result[1].amount).toBe("30.0000000"); // 30 USDC received
     expect(parseFloat(result[1].euroValue.replace(",", "."))).toBeCloseTo(27); // 30 * 0.9
   });
@@ -229,7 +229,7 @@ describe("processTransactions", () => {
     expect(tx.timestamp).toBe("2024-01-08T00:00:00Z");
   });
 
-  it("Handle swap with a path", async () => {
+  it("Handle swap_fee", async () => {
     const accountId = "GC7...";
     const swap = {
       transaction_successful: true,
@@ -260,10 +260,12 @@ describe("processTransactions", () => {
     const result = await processTransactions([swap], accountId, {});
     expect(result).toHaveLength(1);
     const tx = result[0];
-    expect(tx.transactionType).toBe("swap");
+    expect(tx.transactionType).toBe("swap_fee");
     expect(tx.fromAddress).toBe(accountId);
     expect(tx.toAddress).toBe("GAB...");
-    expect(tx.amount).toBe("0.0118384");
-    expect(tx.currency).toBe("USDC");
+    expect(tx.sentAmount).toBe("0.0101149");
+    expect(tx.sentCurrency).toBe("EURC");
+    expect(tx.receivedAmount).toBe("0.0118384");
+    expect(tx.receivedCurrency).toBe("yUSDC");
   });
 });
