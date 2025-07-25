@@ -21,10 +21,7 @@ async function main() {
       .order("asc")
       .call();
 
-    const snapshot = transactions.slice(0, 5);
-    console.log(snapshot);
-
-    const output = await processTransactions(snapshot, walletAddress);
+    const output = await processTransactions(transactions, walletAddress);
     exportToCsv(output);
   } catch (error) {
     console.error("Error:", (error as Error).message);
@@ -130,6 +127,21 @@ export async function processTransactions(
             });
           }
           break;
+        case "invoke_host_function":
+          const balanceChange = tx.asset_balance_changes[0];
+          if (balanceChange.type !== "transfer") {
+            throw new Error("Expected balance change to be a transfer");
+          }
+          acc.transactions.push({
+            transactionHash: tx.transaction_hash,
+            date: new Date(tx.created_at),
+            type: balanceChange.from === walletAddress ? "blend_deposit" : "blend_withdraw",
+            fromAddress: balanceChange.from,
+            toAddress: balanceChange.to,
+            amountStroops: toStroops(balanceChange.amount),
+            currency: balanceChange.asset_type === "native" ? "XLM" : (balanceChange.asset_code as Currency),
+          });
+          break;
         default:
           throw new Error(`Unknown transaction type: ${tx.type}`);
       }
@@ -146,8 +158,8 @@ const toStroops = (amount: string): BigInt => {
 
 const toDecimal = (amount: BigInt): string => {
   const amountStr = amount.toString();
-  const decimalPart = amountStr.slice(-7);
-  const integerPart = amountStr.slice(0, -7);
+  const decimalPart = amountStr.slice(-7).padStart(7, "0");
+  const integerPart = amountStr.slice(0, -7) || "0";
   return `${integerPart},${decimalPart}`;
 };
 

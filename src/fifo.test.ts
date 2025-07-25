@@ -27,7 +27,7 @@ describe("processTransactions", () => {
       fail("Transaction type is not create_account");
     }
 
-    expect(tx.amountStroops).toBe(50000000n);
+    expect(tx.amountStroops).toBe(BigInt("50000000"));
     expect(tx.currency).toBe("XLM");
     expect(tx.date).toStrictEqual(new Date("2024-01-01T00:00:00Z"));
     expect(tx.fromAddress).toBe("GBX...");
@@ -72,7 +72,7 @@ describe("processTransactions", () => {
     if (createAccountTx.type !== "create_account") {
       fail("Transaction type is not create_account");
     }
-    expect(createAccountTx.amountStroops).toBe(10000000000n);
+    expect(createAccountTx.amountStroops).toBe(BigInt("10000000000"));
     expect(createAccountTx.currency).toBe("XLM");
     expect(createAccountTx.date).toStrictEqual(
       new Date("2024-01-01T00:00:00Z"),
@@ -186,5 +186,68 @@ describe("processTransactions", () => {
     expect(tx.date).toStrictEqual(new Date("2025-06-29T17:47:39Z"));
     expect(tx.fromAddress).toBe(myWalletAddress);
     expect(tx.toAddress).toBe("GAB...");
+  });
+
+  it("shouold handle Blend deposit", async () => {
+    const blendDeposit = {
+      transaction_successful: true,
+      source_account: myWalletAddress,
+      type: "invoke_host_function",
+      created_at: "2024-01-09T00:00:00Z",
+      asset_balance_changes: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "EURC",
+          asset_issuer: "GDH...",
+          type: "transfer",
+          from: myWalletAddress,
+          to: "CAJ...",
+          amount: "820.7219053",
+        },
+      ],
+    } as Horizon.ServerApi.OperationRecord;
+
+    const {transactions} = await processTransactions([blendDeposit], myWalletAddress);
+    expect(transactions).toHaveLength(1);
+    const tx = transactions[0];
+    if (tx.type !== "blend_deposit") {
+      fail("Transaction type is not blend_deposit");
+    }
+    expect(tx.amountStroops).toBe(8207219053n);
+    expect(tx.currency).toBe("EURC");
+    expect(tx.date).toStrictEqual(new Date("2024-01-09T00:00:00Z"));
+    expect(tx.fromAddress).toBe(myWalletAddress);
+    expect(tx.toAddress).toBe("CAJ...");
+  });
+
+  it("should handle Blend withdraw", async () => {
+    const blendWithdraw = {
+      type: "invoke_host_function",
+      source_account: myWalletAddress,
+      created_at: "2024-01-08T00:00:00Z",
+      asset_balance_changes: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "EURC",
+          asset_issuer: "GDH...",
+          type: "transfer",
+          from: "CAJ...",
+          to: myWalletAddress,
+          amount: "5.0000000",
+        },
+      ],
+    } as Horizon.ServerApi.OperationRecord;
+
+    const {transactions} = await processTransactions([blendWithdraw], myWalletAddress);
+    expect(transactions).toHaveLength(1);
+    const tx = transactions[0];
+    if (tx.type !== "blend_withdraw") {
+      fail("Transaction type is not blend_withdraw");
+    }
+    expect(tx.amountStroops).toBe(50000000n);
+    expect(tx.currency).toBe("EURC");
+    expect(tx.date).toStrictEqual(new Date("2024-01-08T00:00:00Z"));
+    expect(tx.fromAddress).toBe("CAJ...");
+    expect(tx.toAddress).toBe(myWalletAddress);
   });
 });
