@@ -25,7 +25,7 @@ async function main() {
     console.log(snapshot);
 
     const output = await processTransactions(snapshot, walletAddress);
-    exportToCsv(output, walletAddress);
+    exportToCsv(output);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   }
@@ -97,19 +97,38 @@ export async function processTransactions(
           });
           break;
         case "path_payment_strict_send":
-          acc.transactions.push({
-            transactionHash: tx.transaction_hash,
-            date: new Date(tx.created_at),
-            type: "swap",
-            sourceAmountStroops: toStroops(tx.source_amount),
-            sourceCurrency:
-              tx.source_asset_type === "native"
-                ? "XLM"
-                : (tx.source_asset_code as Currency),
-            destinationAmountStroops: toStroops(tx.destination_min),
-            destinationCurrency:
-              tx.asset_type === "native" ? "XLM" : (tx.asset_code as Currency),
-          });
+          if (tx.to !== walletAddress) {
+            // swap fee
+            acc.transactions.push({
+              transactionHash: tx.transaction_hash,
+              date: new Date(tx.created_at),
+              type: "swap_fee",
+              fromAddress: tx.from,
+              toAddress: tx.to,
+              amountStroops: toStroops(tx.amount),
+              currency:
+                tx.source_asset_type === "native"
+                  ? "XLM"
+                  : (tx.source_asset_code as Currency),
+            });
+          } else {
+            // swap
+            acc.transactions.push({
+              transactionHash: tx.transaction_hash,
+              date: new Date(tx.created_at),
+              type: "swap",
+              sourceAmountStroops: toStroops(tx.source_amount),
+              sourceCurrency:
+                tx.source_asset_type === "native"
+                  ? "XLM"
+                  : (tx.source_asset_code as Currency),
+              destinationAmountStroops: toStroops(tx.destination_min),
+              destinationCurrency:
+                tx.asset_type === "native"
+                  ? "XLM"
+                  : (tx.asset_code as Currency),
+            });
+          }
           break;
         default:
           throw new Error(`Unknown transaction type: ${tx.type}`);

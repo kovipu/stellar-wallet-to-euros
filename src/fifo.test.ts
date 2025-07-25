@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { processTransactions } from "./fifo";
 import { fail } from "assert";
+import { Horizon } from "@stellar/stellar-sdk";
 
 const myWalletAddress = "GC7...";
 
@@ -73,7 +74,9 @@ describe("processTransactions", () => {
     }
     expect(createAccountTx.amountStroops).toBe(BigInt("10000000000"));
     expect(createAccountTx.currency).toBe("XLM");
-    expect(createAccountTx.date).toStrictEqual(new Date("2024-01-01T00:00:00Z"));
+    expect(createAccountTx.date).toStrictEqual(
+      new Date("2024-01-01T00:00:00Z"),
+    );
     expect(createAccountTx.fromAddress).toBe("GBX...");
     expect(createAccountTx.toAddress).toBe(myWalletAddress);
 
@@ -95,7 +98,9 @@ describe("processTransactions", () => {
     }
     expect(paymentReceivedTx.amountStroops).toBe(BigInt("500000000"));
     expect(paymentReceivedTx.currency).toBe("USDC");
-    expect(paymentReceivedTx.date).toStrictEqual(new Date("2024-01-03T00:00:00Z"));
+    expect(paymentReceivedTx.date).toStrictEqual(
+      new Date("2024-01-03T00:00:00Z"),
+    );
     expect(paymentReceivedTx.fromAddress).toBe("GAZ...");
     expect(paymentReceivedTx.toAddress).toBe(myWalletAddress);
   });
@@ -136,5 +141,50 @@ describe("processTransactions", () => {
     expect(tx.destinationAmountStroops).toBe(BigInt("375693647033"));
     expect(tx.destinationCurrency).toBe("USDC");
     expect(tx.date).toStrictEqual(new Date("2025-04-05T08:31:53Z"));
+  });
+
+  it("should process swap_fee transaction", async () => {
+    const swapFee = {
+      transaction_successful: true,
+      source_account: myWalletAddress,
+      type: "path_payment_strict_send",
+      created_at: "2025-06-29T17:47:39Z",
+      transaction_hash: "38ee...",
+      asset_type: "credit_alphanum12",
+      asset_code: "yUSDC",
+      asset_issuer: "GDG...",
+      from: myWalletAddress,
+      to: "GAB...",
+      amount: "0.0118384",
+      path: [
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "USDC",
+          asset_issuer: "GA5...",
+        },
+      ],
+      source_amount: "0.0101149",
+      destination_min: "0.0000001",
+      source_asset_type: "credit_alphanum4",
+      source_asset_code: "EURC",
+      source_asset_issuer: "GDH...",
+    } as Horizon.ServerApi.OperationRecord;
+
+    const { transactions } = await processTransactions(
+      [swapFee],
+      myWalletAddress,
+    );
+
+    expect(transactions).toHaveLength(1);
+
+    const tx = transactions[0];
+    if (tx.type !== "swap_fee") {
+      fail("Transaction type is not swap_fee");
+    }
+    expect(tx.amountStroops).toBe(118384n);
+    expect(tx.currency).toBe("EURC");
+    expect(tx.date).toStrictEqual(new Date("2025-06-29T17:47:39Z"));
+    expect(tx.fromAddress).toBe(myWalletAddress);
+    expect(tx.toAddress).toBe("GAB...");
   });
 });
