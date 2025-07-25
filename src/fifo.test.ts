@@ -27,7 +27,7 @@ describe("processTransactions", () => {
       fail("Transaction type is not create_account");
     }
 
-    expect(tx.amountStroops).toBe(BigInt("50000000"));
+    expect(tx.amountStroops).toBe(50000000n);
     expect(tx.currency).toBe("XLM");
     expect(tx.date).toStrictEqual(new Date("2024-01-01T00:00:00Z"));
     expect(tx.fromAddress).toBe("GBX...");
@@ -72,7 +72,7 @@ describe("processTransactions", () => {
     if (createAccountTx.type !== "create_account") {
       fail("Transaction type is not create_account");
     }
-    expect(createAccountTx.amountStroops).toBe(BigInt("10000000000"));
+    expect(createAccountTx.amountStroops).toBe(10000000000n);
     expect(createAccountTx.currency).toBe("XLM");
     expect(createAccountTx.date).toStrictEqual(
       new Date("2024-01-01T00:00:00Z"),
@@ -85,7 +85,7 @@ describe("processTransactions", () => {
     if (paymentSentTx.type !== "payment_sent") {
       fail("Transaction type is not payment_sent");
     }
-    expect(paymentSentTx.amountStroops).toBe(BigInt("1000000000"));
+    expect(paymentSentTx.amountStroops).toBe(1000000000n);
     expect(paymentSentTx.currency).toBe("XLM");
     expect(paymentSentTx.date).toStrictEqual(new Date("2024-01-02T00:00:00Z"));
     expect(paymentSentTx.fromAddress).toBe(myWalletAddress);
@@ -96,7 +96,7 @@ describe("processTransactions", () => {
     if (paymentReceivedTx.type !== "payment_received") {
       fail("Transaction type is not payment_received");
     }
-    expect(paymentReceivedTx.amountStroops).toBe(BigInt("500000000"));
+    expect(paymentReceivedTx.amountStroops).toBe(500000000n);
     expect(paymentReceivedTx.currency).toBe("USDC");
     expect(paymentReceivedTx.date).toStrictEqual(
       new Date("2024-01-03T00:00:00Z"),
@@ -136,9 +136,9 @@ describe("processTransactions", () => {
     if (tx.type !== "swap") {
       fail("Transaction type is not swap");
     }
-    expect(tx.sourceAmountStroops).toBe(BigInt("1479395651000"));
+    expect(tx.sourceAmountStroops).toBe(1479395651000n);
     expect(tx.sourceCurrency).toBe("XLM");
-    expect(tx.destinationAmountStroops).toBe(BigInt("375693647033"));
+    expect(tx.destinationAmountStroops).toBe(375693647033n);
     expect(tx.destinationCurrency).toBe("USDC");
     expect(tx.date).toStrictEqual(new Date("2025-04-05T08:31:53Z"));
   });
