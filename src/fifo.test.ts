@@ -207,7 +207,10 @@ describe("processTransactions", () => {
       ],
     } as Horizon.ServerApi.OperationRecord;
 
-    const {transactions} = await processTransactions([blendDeposit], myWalletAddress);
+    const { transactions } = await processTransactions(
+      [blendDeposit],
+      myWalletAddress,
+    );
     expect(transactions).toHaveLength(1);
     const tx = transactions[0];
     if (tx.type !== "blend_deposit") {
@@ -238,7 +241,10 @@ describe("processTransactions", () => {
       ],
     } as Horizon.ServerApi.OperationRecord;
 
-    const {transactions} = await processTransactions([blendWithdraw], myWalletAddress);
+    const { transactions } = await processTransactions(
+      [blendWithdraw],
+      myWalletAddress,
+    );
     expect(transactions).toHaveLength(1);
     const tx = transactions[0];
     if (tx.type !== "blend_withdraw") {

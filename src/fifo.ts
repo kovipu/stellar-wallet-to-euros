@@ -89,11 +89,11 @@ export async function processTransactions(
             fromAddress: tx.from,
             toAddress: tx.to,
             amountStroops: toStroops(tx.amount),
-            currency:
-              tx.asset_type === "native" ? "XLM" : (tx.asset_code as Currency),
+            currency: toCurrency(tx.asset_type, tx.asset_code),
           });
           break;
         case "path_payment_strict_send":
+        case "path_payment_strict_receive":
           if (tx.to !== walletAddress) {
             // swap fee
             acc.transactions.push({
@@ -103,10 +103,7 @@ export async function processTransactions(
               fromAddress: tx.from,
               toAddress: tx.to,
               amountStroops: toStroops(tx.amount),
-              currency:
-                tx.source_asset_type === "native"
-                  ? "XLM"
-                  : (tx.source_asset_code as Currency),
+              currency: toCurrency(tx.source_asset_type, tx.source_asset_code),
             });
           } else {
             // swap
@@ -115,15 +112,12 @@ export async function processTransactions(
               date: new Date(tx.created_at),
               type: "swap",
               sourceAmountStroops: toStroops(tx.source_amount),
-              sourceCurrency:
-                tx.source_asset_type === "native"
-                  ? "XLM"
-                  : (tx.source_asset_code as Currency),
-              destinationAmountStroops: toStroops(tx.destination_min),
-              destinationCurrency:
-                tx.asset_type === "native"
-                  ? "XLM"
-                  : (tx.asset_code as Currency),
+              sourceCurrency: toCurrency(
+                tx.source_asset_type,
+                tx.source_asset_code,
+              ),
+              destinationAmountStroops: toStroops(tx.amount),
+              destinationCurrency: toCurrency(tx.asset_type, tx.asset_code),
             });
           }
           break;
@@ -135,11 +129,17 @@ export async function processTransactions(
           acc.transactions.push({
             transactionHash: tx.transaction_hash,
             date: new Date(tx.created_at),
-            type: balanceChange.from === walletAddress ? "blend_deposit" : "blend_withdraw",
+            type:
+              balanceChange.from === walletAddress
+                ? "blend_deposit"
+                : "blend_withdraw",
             fromAddress: balanceChange.from,
             toAddress: balanceChange.to,
             amountStroops: toStroops(balanceChange.amount),
-            currency: balanceChange.asset_type === "native" ? "XLM" : (balanceChange.asset_code as Currency),
+            currency: toCurrency(
+              balanceChange.asset_type,
+              balanceChange.asset_code,
+            ),
           });
           break;
         default:
@@ -161,6 +161,19 @@ const toDecimal = (amount: BigInt): string => {
   const decimalPart = amountStr.slice(-7).padStart(7, "0");
   const integerPart = amountStr.slice(0, -7) || "0";
   return `${integerPart},${decimalPart}`;
+};
+
+const toCurrency = (
+  assetType: string,
+  assetCode: string | undefined,
+): Currency => {
+  if (assetType === "native") {
+    return "XLM";
+  }
+  if (!assetCode) {
+    throw new Error("Asset code is required");
+  }
+  return assetCode as Currency;
 };
 
 const exportToCsv = (output: Output) => {
