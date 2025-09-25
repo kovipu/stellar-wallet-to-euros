@@ -110,12 +110,10 @@ describe("processTransactions", () => {
       {
         type: "path_payment_strict_send",
         created_at: "2025-04-05T08:31:53Z",
-        transaction_hash:
-          "910ee1edeb8965cae07e31008575ffa33050dc8c109d3ff54db6f9907551b3d7",
+        transaction_hash: "910...",
         asset_type: "credit_alphanum4",
         asset_code: "USDC",
-        asset_issuer:
-          "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+        asset_issuer: "GA5...",
         from: myWalletAddress,
         to: myWalletAddress,
         amount: "37702.4250015",
@@ -138,7 +136,7 @@ describe("processTransactions", () => {
     }
     expect(tx.sourceAmountStroops).toBe(1479395651000n);
     expect(tx.sourceCurrency).toBe("XLM");
-    expect(tx.destinationAmountStroops).toBe(375693647033n);
+    expect(tx.destinationAmountStroops).toBe(377024250015n);
     expect(tx.destinationCurrency).toBe("USDC");
     expect(tx.date).toStrictEqual(new Date("2025-04-05T08:31:53Z"));
   });
@@ -188,7 +186,7 @@ describe("processTransactions", () => {
     expect(tx.toAddress).toBe("GAB...");
   });
 
-  it("shouold handle Blend deposit", async () => {
+  it("should handle Blend deposit", async () => {
     const blendDeposit = {
       transaction_successful: true,
       source_account: myWalletAddress,
