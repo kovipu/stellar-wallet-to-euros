@@ -15,211 +15,299 @@ async function main() {
   try {
     console.log(`Fetching transactions for wallet: ${walletAddress}`);
 
-    const res = await horizonServer
-      .payments()
-      .forAccount(walletAddress)
-      .limit(200)
-      .order("asc")
-      .call();
+    const allTransactions: TxWithOps[] = await fetchTransactionsWithOps(
+      horizonServer,
+      walletAddress,
+    );
 
-    // TODO: proper pagination
-    const res2 = await res.next();
-
-    const allTransactions = [...res.records, ...res2.records];
-
-    const output = await processTransactions(allTransactions, walletAddress);
-    exportToCsv(output);
+    const txRows = await processTransactions(allTransactions, walletAddress);
+    exportToCsv(txRows);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   }
 }
 
-type Output = {
-  transactions: Transaction[];
-  balances: Balances;
+type TxWithOps = {
+  tx: Horizon.ServerApi.TransactionRecord;
+  ops: Horizon.ServerApi.OperationRecord[];
 };
 
-type Balances = Record<Currency, BigInt>;
+export async function fetchTransactionsWithOps(
+  hs: Horizon.Server,
+  wallet: string,
+): Promise<TxWithOps[]> {
+  console.log(`Fetching transactions...`);
 
-type Transaction = WalletTransaction | SwapTransaction;
+  // 1) Fetch ALL txs for the account (paginated)
+  let page = await hs
+    .transactions()
+    .forAccount(wallet)
+    .limit(200)
+    .order("asc")
+    .call();
+  const txs: Horizon.ServerApi.TransactionRecord[] = [];
+  while (true) {
+    txs.push(...page.records);
+    if (page.records.length < 200) break;
+    page = await page.next();
+  }
+  console.log(`Fetched ${txs.length} transactions.`);
+
+  // 2) For each tx, fetch its operations (paginated just in case)
+  console.log(`Fetching operations...`);
+  const result: TxWithOps[] = [];
+  for (const tx of txs) {
+    let opPage = await hs
+      .operations()
+      .forTransaction(tx.hash)
+      .limit(200)
+      .order("asc")
+      .call();
+    const ops: Horizon.ServerApi.OperationRecord[] = [];
+    while (true) {
+      // this bullshit is to filter out dusting attacks' ops to other wallets
+      const opsForWallet = opPage.records.filter((op) => {
+        if (op.type === "payment") {
+          return op.source_account === wallet || op.to === wallet;
+        }
+        if (op.type === "create_claimable_balance") {
+          return op.claimants.some((c) => c.destination === wallet);
+        }
+        return true;
+      });
+      ops.push(...opsForWallet);
+      if (opPage.records.length < 200) break;
+      opPage = await opPage.next();
+    }
+    result.push({ tx, ops });
+  }
+  console.log(`Fetched all operations.`);
+
+  return result;
+}
 
 type Currency = "XLM" | "USDC" | "EURC";
 
-type WalletTransaction = {
+type Balances = Record<Currency, bigint>;
+
+type TxRow = {
   transactionHash: string;
   date: Date;
-  type:
-    | "create_account"
-    | "payment_received"
-    | "payment_sent"
-    | "swap_fee"
-    | "blend_deposit"
-    | "blend_withdraw";
-  fromAddress: string;
-  toAddress: string;
-  amountStroops: BigInt;
-  currency: Currency;
-  feeStroops: BigInt;
-  balances: Balances;
+  feeStroops: bigint; // applied once per tx (0 if not your fee)
+  ops: TxOpSummary[]; // human-friendly summary of what changed
+  balances: Balances; // snapshot after this tx
 };
 
-type SwapTransaction = {
-  transactionHash: string;
-  date: Date;
-  type: "swap";
-  sourceAmountStroops: BigInt;
-  sourceCurrency: Currency;
-  destinationAmountStroops: BigInt;
-  destinationCurrency: Currency;
-  feeStroops: BigInt;
-  balances: Balances;
-};
+type TxOpSummary =
+  | { kind: "create_account"; from: string; to: string; amountStroops: bigint }
+  | {
+      kind: "payment";
+      direction: "in" | "out";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
+  | {
+      kind: "swap";
+      sourceCurrency: Currency;
+      sourceAmountStroops: bigint;
+      destinationCurrency: Currency;
+      destinationAmountStroops: bigint;
+    }
+  | {
+      kind: "blend_deposit" | "blend_withdraw";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
+  | {
+      kind: "change_trust";
+      currency: Currency;
+    }
+  | {
+      kind: "set_options";
+    }
+  | {
+      kind: "create_claimable_balance";
+      amount: string;
+      currency: string;
+    };
 
 export async function processTransactions(
-  transactions: Horizon.ServerApi.OperationRecord[],
+  transactions: TxWithOps[],
   walletAddress: string,
-): Promise<Output> {
-  const acc = {
-    transactions: [],
-    balances: {
-      XLM: 0n,
-      USDC: 0n,
-      EURC: 0n,
-    },
-  } as Output;
+): Promise<TxRow[]> {
+  const txRows: TxRow[] = [];
+  const balances: Balances = {
+    XLM: 0n,
+    USDC: 0n,
+    EURC: 0n,
+  };
 
-  // Take the incoming transactions, and increment that currency's account's balance
-  for (const tx of transactions) {
-    const { fee_charged, fee_account } = await tx.transaction();
-    const feeStroops = fee_account === walletAddress ? BigInt(fee_charged) : 0n;
+  for (const { tx, ops } of transactions) {
+    const rowOps: TxOpSummary[] = [];
 
-    if (tx.type === "create_account") {
-      acc.balances["XLM"] = toStroops(tx.starting_balance) - feeStroops;
-      acc.transactions.push({
-        transactionHash: tx.transaction_hash,
-        date: new Date(tx.created_at),
-        type: "create_account",
-        fromAddress: tx.funder,
-        toAddress: walletAddress,
-        amountStroops: toStroops(tx.starting_balance),
-        feeStroops,
-        currency: "XLM",
-        balances: structuredClone(acc.balances),
-      });
-    } else if (tx.type === "payment") {
-      const currency = toCurrency(tx.asset_type, tx.asset_code);
-
-      if (tx.to === walletAddress) {
-        // received payment
-        acc.balances[currency] += toStroops(tx.amount);
-      } else {
-        // sent payment
-        acc.balances[currency] -= toStroops(tx.amount);
-      }
-      acc.balances.XLM -= feeStroops;
-
-      acc.transactions.push({
-        transactionHash: tx.transaction_hash,
-        date: new Date(tx.created_at),
-        type: tx.to === walletAddress ? "payment_received" : "payment_sent",
-        fromAddress: tx.from,
-        toAddress: tx.to,
-        amountStroops: toStroops(tx.amount),
-        currency,
-        feeStroops,
-        balances: structuredClone(acc.balances),
-      });
-    } else if (
-      tx.type === "path_payment_strict_send" ||
-      tx.type === "path_payment_strict_receive"
-    ) {
-      if (tx.to !== walletAddress) {
-        // swap fee
-        const currency = toCurrency(tx.source_asset_type, tx.source_asset_code);
-        const amountStroops = toStroops(tx.source_amount);
-
-        acc.balances[currency] -= amountStroops;
-        acc.balances.XLM -= feeStroops;
-
-        acc.transactions.push({
-          transactionHash: tx.transaction_hash,
-          date: new Date(tx.created_at),
-          type: "swap_fee",
-          fromAddress: tx.from,
-          toAddress: tx.to,
-          amountStroops,
-          currency,
-          feeStroops,
-          balances: structuredClone(acc.balances),
+    // Apply operation effects
+    for (const op of ops) {
+      if (op.type === "create_account") {
+        rowOps.push({
+          kind: "create_account",
+          from: op.funder,
+          to: walletAddress,
+          amountStroops: toStroops(op.starting_balance),
         });
-      } else {
-        // swap
+        balances.XLM = toStroops(op.starting_balance);
+      } else if (op.type === "payment") {
+        const currency = toCurrency(op.asset_type, op.asset_code);
+        if (op.to === walletAddress) {
+          rowOps.push({
+            kind: "payment",
+            direction: "in",
+            from: op.from,
+            to: op.to,
+            currency,
+            amountStroops: toStroops(op.amount),
+          });
+          balances[currency] += toStroops(op.amount);
+        } else {
+          rowOps.push({
+            kind: "payment",
+            direction: "out",
+            from: op.from,
+            to: op.to,
+            currency,
+            amountStroops: toStroops(op.amount),
+          });
+          balances[currency] -= toStroops(op.amount);
+        }
+      } else if (
+        op.type === "path_payment_strict_send" ||
+        op.type === "path_payment_strict_receive"
+      ) {
         const sourceCurrency = toCurrency(
-          tx.source_asset_type,
-          tx.source_asset_code,
+          op.source_asset_type,
+          op.source_asset_code,
         );
-        const destinationCurrency = toCurrency(tx.asset_type, tx.asset_code);
-        const sourceAmountStroops = toStroops(tx.source_amount);
-        const destinationAmountStroops = toStroops(tx.amount);
+        const sourceAmountStroops = toStroops(op.source_amount);
 
-        acc.balances[sourceCurrency] -= sourceAmountStroops;
-        acc.balances[destinationCurrency] += destinationAmountStroops;
-        acc.balances.XLM -= feeStroops;
+        if (op.to === walletAddress) {
+          // treat as swap: source debited, destination credited
+          const destinationCurrency = toCurrency(op.asset_type, op.asset_code);
+          const destinationAmountStroops = toStroops(op.amount);
+          rowOps.push({
+            kind: "swap",
+            sourceCurrency,
+            sourceAmountStroops,
+            destinationCurrency,
+            destinationAmountStroops,
+          });
+          balances[sourceCurrency] -= sourceAmountStroops;
+          balances[destinationCurrency] += destinationAmountStroops;
+        } else {
+          // outbound payment via path
+          rowOps.push({
+            kind: "payment",
+            direction: "out",
+            from: op.from,
+            to: op.to,
+            currency: sourceCurrency,
+            amountStroops: sourceAmountStroops,
+          });
+          balances[sourceCurrency] -= sourceAmountStroops;
+        }
+      } else if (op.type === "invoke_host_function") {
+        const balanceChange = op.asset_balance_changes[0];
+        if (balanceChange.type !== "transfer") {
+          throw new Error("Expected balance change to be a transfer");
+        }
 
-        acc.transactions.push({
-          transactionHash: tx.transaction_hash,
-          date: new Date(tx.created_at),
-          type: "swap",
-          sourceAmountStroops,
-          sourceCurrency,
-          destinationAmountStroops,
-          destinationCurrency,
-          feeStroops,
-          balances: structuredClone(acc.balances),
+        const currency = toCurrency(
+          balanceChange.asset_type,
+          balanceChange.asset_code,
+        );
+
+        if (balanceChange.from === walletAddress) {
+          // deposit
+          rowOps.push({
+            kind: "blend_deposit",
+            from: balanceChange.from,
+            to: balanceChange.to,
+            currency,
+            amountStroops: toStroops(balanceChange.amount),
+          });
+          balances[currency] -= toStroops(balanceChange.amount);
+        } else {
+          // withdraw
+          rowOps.push({
+            kind: "blend_withdraw",
+            from: balanceChange.from,
+            to: balanceChange.to,
+            currency,
+            amountStroops: toStroops(balanceChange.amount),
+          });
+          balances[currency] += toStroops(balanceChange.amount);
+        }
+      } else if (op.type === "change_trust") {
+        rowOps.push({
+          kind: "change_trust",
+          currency: toCurrency(op.asset_type, op.asset_code),
         });
-      }
-    } else if (tx.type === "invoke_host_function") {
-      const balanceChange = tx.asset_balance_changes[0];
-      const currency = toCurrency(
-        balanceChange.asset_type,
-        balanceChange.asset_code,
-      );
-      const isDeposit = balanceChange.from === walletAddress;
-      if (balanceChange.type !== "transfer") {
-        throw new Error("Expected balance change to be a transfer");
-      }
-
-      if (isDeposit) {
-        acc.balances[currency] -= toStroops(balanceChange.amount);
+      } else if (op.type === "set_options") {
+        rowOps.push({
+          kind: "set_options",
+        });
+      } else if (op.type === "create_claimable_balance") {
+        rowOps.push({
+          kind: "create_claimable_balance",
+          amount: op.amount,
+          currency: op.asset,
+        });
       } else {
-        acc.balances[currency] += toStroops(balanceChange.amount);
+        throw new Error(`Unknown operation type: ${op.type}`);
       }
-      acc.balances.XLM -= feeStroops;
-
-      acc.transactions.push({
-        transactionHash: tx.transaction_hash,
-        date: new Date(tx.created_at),
-        type: isDeposit ? "blend_deposit" : "blend_withdraw",
-        fromAddress: balanceChange.from,
-        toAddress: balanceChange.to,
-        amountStroops: toStroops(balanceChange.amount),
-        currency,
-        feeStroops,
-        balances: structuredClone(acc.balances),
-      });
-    } else {
-      throw new Error(`Unknown transaction type: ${tx.type}`);
     }
+
+    // Apply TX fee once, only if we are the fee payer
+    const fee = tx.fee_account === walletAddress ? BigInt(tx.fee_charged) : 0n;
+    if (fee > 0n) balances.XLM -= fee;
+
+    // Snapshot transaction and balances
+    txRows.push({
+      transactionHash: tx.hash,
+      date: new Date(tx.created_at),
+      feeStroops: fee,
+      ops: rowOps,
+      balances: structuredClone(balances),
+    });
   }
-  return acc;
+  return txRows;
 }
 
 // Convert amount to BigInt stroops.
-const toStroops = (amount: string): BigInt => {
-  return BigInt(amount.replace(".", "").replace(",", ""));
+const toStroops = (amount: string): bigint => {
+  // Remove commas first
+  const cleanAmount = amount.replace(",", "");
+
+  // Split by decimal point
+  const parts = cleanAmount.split(".");
+
+  if (parts.length === 1) {
+    // No decimal point - this is already in stroops (like fees from API)
+    return BigInt(parts[0]);
+  } else if (parts.length === 2) {
+    // Has decimal point - convert from XLM to stroops
+    const integerPart = parts[0];
+    const decimalPart = parts[1].padEnd(7, "0").slice(0, 7); // Pad to 7 digits and truncate if longer
+
+    return BigInt(integerPart) * 10000000n + BigInt(decimalPart);
+  } else {
+    throw new Error(`Invalid amount format: ${amount}`);
+  }
 };
 
-const toDecimal = (amount: BigInt): string => {
+const toDecimal = (amount: bigint): string => {
   const amountStr = amount.toString();
   const decimalPart = amountStr.slice(-7).padStart(7, "0");
   const integerPart = amountStr.slice(0, -7) || "0";
@@ -239,52 +327,29 @@ const toCurrency = (
   return assetCode as Currency;
 };
 
-const exportToCsv = (output: Output) => {
+const exportToCsv = (output: TxRow[]) => {
   const outputCsv = stringify(
-    output.transactions.map((tx) => {
-      if (tx.type === "swap") {
-        return {
-          Date: tx.date.toISOString(),
-          Type: tx.type,
-          Amount: toDecimal(tx.destinationAmountStroops),
-          Currency: tx.destinationCurrency,
-          Fee: toDecimal(tx.feeStroops),
-          SourceAmount: toDecimal(tx.sourceAmountStroops),
-          SourceCurrency: tx.sourceCurrency,
-          "XLM Balance": toDecimal(tx.balances.XLM),
-          "USDC Balance": toDecimal(tx.balances.USDC),
-          "EURC Balance": toDecimal(tx.balances.EURC),
-        };
-      } else {
-        return {
-          Date: tx.date.toISOString(),
-          Type: tx.type,
-          Amount: toDecimal(tx.amountStroops),
-          Currency: tx.currency,
-          Fee: toDecimal(tx.feeStroops),
-          From: tx.fromAddress,
-          To: tx.toAddress,
-          "XLM Balance": toDecimal(tx.balances.XLM),
-          "USDC Balance": toDecimal(tx.balances.USDC),
-          "EURC Balance": toDecimal(tx.balances.EURC),
-        };
-      }
+    output.map((tx) => {
+      return {
+        Date: tx.date.toISOString(),
+        Type: tx.ops.map((op) => op.kind).join(", "),
+        Fee: toDecimal(tx.feeStroops),
+        "XLM Balance": toDecimal(tx.balances.XLM),
+        "USDC Balance": toDecimal(tx.balances.USDC),
+        "EURC Balance": toDecimal(tx.balances.EURC),
+        "Transaction Explorer": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
+      };
     }),
     {
       header: true,
       columns: [
         "Date",
         "Type",
-        "Amount",
-        "Currency",
         "Fee",
-        "SourceAmount",
-        "SourceCurrency",
-        "From",
-        "To",
         "XLM Balance",
         "USDC Balance",
         "EURC Balance",
+        "Transaction Explorer",
       ],
     },
   );
