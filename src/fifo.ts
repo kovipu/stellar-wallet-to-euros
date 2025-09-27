@@ -59,6 +59,7 @@ type WalletTransaction = {
   toAddress: string;
   amountStroops: BigInt;
   currency: Currency;
+  feeStroops: BigInt;
   balances: Balances;
 };
 
@@ -70,6 +71,7 @@ type SwapTransaction = {
   sourceCurrency: Currency;
   destinationAmountStroops: BigInt;
   destinationCurrency: Currency;
+  feeStroops: BigInt;
   balances: Balances;
 };
 
@@ -77,128 +79,139 @@ export async function processTransactions(
   transactions: Horizon.ServerApi.OperationRecord[],
   walletAddress: string,
 ): Promise<Output> {
+  const acc = {
+    transactions: [],
+    balances: {
+      XLM: 0n,
+      USDC: 0n,
+      EURC: 0n,
+    },
+  } as Output;
+
   // Take the incoming transactions, and increment that currency's account's balance
-  return transactions.reduce(
-    (acc, tx) => {
-      if (tx.type === "create_account") {
-        acc.balances["XLM"] = toStroops(tx.starting_balance);
+  for (const tx of transactions) {
+    const { fee_charged, fee_account } = await tx.transaction();
+    const feeStroops = fee_account === walletAddress ? BigInt(fee_charged) : 0n;
+
+    if (tx.type === "create_account") {
+      acc.balances["XLM"] = toStroops(tx.starting_balance) - feeStroops;
+      acc.transactions.push({
+        transactionHash: tx.transaction_hash,
+        date: new Date(tx.created_at),
+        type: "create_account",
+        fromAddress: tx.funder,
+        toAddress: walletAddress,
+        amountStroops: toStroops(tx.starting_balance),
+        feeStroops,
+        currency: "XLM",
+        balances: structuredClone(acc.balances),
+      });
+    } else if (tx.type === "payment") {
+      const currency = toCurrency(tx.asset_type, tx.asset_code);
+
+      if (tx.to === walletAddress) {
+        // received payment
+        acc.balances[currency] += toStroops(tx.amount);
+      } else {
+        // sent payment
+        acc.balances[currency] -= toStroops(tx.amount);
+      }
+      acc.balances.XLM -= feeStroops;
+
+      acc.transactions.push({
+        transactionHash: tx.transaction_hash,
+        date: new Date(tx.created_at),
+        type: tx.to === walletAddress ? "payment_received" : "payment_sent",
+        fromAddress: tx.from,
+        toAddress: tx.to,
+        amountStroops: toStroops(tx.amount),
+        currency,
+        feeStroops,
+        balances: structuredClone(acc.balances),
+      });
+    } else if (
+      tx.type === "path_payment_strict_send" ||
+      tx.type === "path_payment_strict_receive"
+    ) {
+      if (tx.to !== walletAddress) {
+        // swap fee
+        const currency = toCurrency(tx.source_asset_type, tx.source_asset_code);
+        const amountStroops = toStroops(tx.source_amount);
+
+        acc.balances[currency] -= amountStroops;
+        acc.balances.XLM -= feeStroops;
+
         acc.transactions.push({
           transactionHash: tx.transaction_hash,
           date: new Date(tx.created_at),
-          type: "create_account",
-          fromAddress: tx.funder,
-          toAddress: walletAddress,
-          amountStroops: toStroops(tx.starting_balance),
-          currency: "XLM",
-          balances: structuredClone(acc.balances),
-        });
-      } else if (tx.type === "payment") {
-        const currency = toCurrency(tx.asset_type, tx.asset_code);
-        if (tx.to === walletAddress) {
-          acc.balances[currency] += toStroops(tx.amount);
-        } else {
-          acc.balances[currency] -= toStroops(tx.amount);
-        }
-        acc.transactions.push({
-          transactionHash: tx.transaction_hash,
-          date: new Date(tx.created_at),
-          type: tx.to === walletAddress ? "payment_received" : "payment_sent",
+          type: "swap_fee",
           fromAddress: tx.from,
           toAddress: tx.to,
-          amountStroops: toStroops(tx.amount),
+          amountStroops,
           currency,
-          balances: structuredClone(acc.balances),
-        });
-      } else if (
-        tx.type === "path_payment_strict_send" ||
-        tx.type === "path_payment_strict_receive"
-      ) {
-        if (tx.to !== walletAddress) {
-          // swap fee
-          const currency = toCurrency(
-            tx.source_asset_type,
-            tx.source_asset_code,
-          );
-          const amountStroops = toStroops(tx.source_amount);
-          console.log("prev balance", acc.balances[currency]);
-          acc.balances[currency] -= amountStroops;
-          console.log({
-            date: tx.created_at,
-            amountStroops,
-            currency,
-            balances: acc.balances,
-          });
-          acc.transactions.push({
-            transactionHash: tx.transaction_hash,
-            date: new Date(tx.created_at),
-            type: "swap_fee",
-            fromAddress: tx.from,
-            toAddress: tx.to,
-            amountStroops,
-            currency,
-            balances: structuredClone(acc.balances),
-          });
-        } else {
-          // swap
-          const sourceCurrency = toCurrency(
-            tx.source_asset_type,
-            tx.source_asset_code,
-          );
-          const destinationCurrency = toCurrency(tx.asset_type, tx.asset_code);
-          const sourceAmountStroops = toStroops(tx.source_amount);
-          const destinationAmountStroops = toStroops(tx.amount);
-          acc.balances[sourceCurrency] -= sourceAmountStroops;
-          acc.balances[destinationCurrency] += destinationAmountStroops;
-          acc.transactions.push({
-            transactionHash: tx.transaction_hash,
-            date: new Date(tx.created_at),
-            type: "swap",
-            sourceAmountStroops,
-            sourceCurrency,
-            destinationAmountStroops,
-            destinationCurrency,
-            balances: structuredClone(acc.balances),
-          });
-        }
-      } else if (tx.type === "invoke_host_function") {
-        const balanceChange = tx.asset_balance_changes[0];
-        const currency = toCurrency(
-          balanceChange.asset_type,
-          balanceChange.asset_code,
-        );
-        const isDeposit = balanceChange.from === walletAddress;
-        if (balanceChange.type !== "transfer") {
-          throw new Error("Expected balance change to be a transfer");
-        }
-        if (isDeposit) {
-          acc.balances[currency] -= toStroops(balanceChange.amount);
-        } else {
-          acc.balances[currency] += toStroops(balanceChange.amount);
-        }
-        acc.transactions.push({
-          transactionHash: tx.transaction_hash,
-          date: new Date(tx.created_at),
-          type: isDeposit ? "blend_deposit" : "blend_withdraw",
-          fromAddress: balanceChange.from,
-          toAddress: balanceChange.to,
-          amountStroops: toStroops(balanceChange.amount),
-          currency,
+          feeStroops,
           balances: structuredClone(acc.balances),
         });
       } else {
-        throw new Error(`Unknown transaction type: ${tx.type}`);
+        // swap
+        const sourceCurrency = toCurrency(
+          tx.source_asset_type,
+          tx.source_asset_code,
+        );
+        const destinationCurrency = toCurrency(tx.asset_type, tx.asset_code);
+        const sourceAmountStroops = toStroops(tx.source_amount);
+        const destinationAmountStroops = toStroops(tx.amount);
+
+        acc.balances[sourceCurrency] -= sourceAmountStroops;
+        acc.balances[destinationCurrency] += destinationAmountStroops;
+        acc.balances.XLM -= feeStroops;
+
+        acc.transactions.push({
+          transactionHash: tx.transaction_hash,
+          date: new Date(tx.created_at),
+          type: "swap",
+          sourceAmountStroops,
+          sourceCurrency,
+          destinationAmountStroops,
+          destinationCurrency,
+          feeStroops,
+          balances: structuredClone(acc.balances),
+        });
       }
-      return acc;
-    },
-    {
-      transactions: [],
-      balances: {
-        XLM: 0n,
-        USDC: 0n,
-        EURC: 0n,
-      },
-    } as Output,
-  );
+    } else if (tx.type === "invoke_host_function") {
+      const balanceChange = tx.asset_balance_changes[0];
+      const currency = toCurrency(
+        balanceChange.asset_type,
+        balanceChange.asset_code,
+      );
+      const isDeposit = balanceChange.from === walletAddress;
+      if (balanceChange.type !== "transfer") {
+        throw new Error("Expected balance change to be a transfer");
+      }
+
+      if (isDeposit) {
+        acc.balances[currency] -= toStroops(balanceChange.amount);
+      } else {
+        acc.balances[currency] += toStroops(balanceChange.amount);
+      }
+      acc.balances.XLM -= feeStroops;
+
+      acc.transactions.push({
+        transactionHash: tx.transaction_hash,
+        date: new Date(tx.created_at),
+        type: isDeposit ? "blend_deposit" : "blend_withdraw",
+        fromAddress: balanceChange.from,
+        toAddress: balanceChange.to,
+        amountStroops: toStroops(balanceChange.amount),
+        currency,
+        feeStroops,
+        balances: structuredClone(acc.balances),
+      });
+    } else {
+      throw new Error(`Unknown transaction type: ${tx.type}`);
+    }
+  }
+  return acc;
 }
 
 // Convert amount to BigInt stroops.
@@ -235,6 +248,7 @@ const exportToCsv = (output: Output) => {
           Type: tx.type,
           Amount: toDecimal(tx.destinationAmountStroops),
           Currency: tx.destinationCurrency,
+          Fee: toDecimal(tx.feeStroops),
           SourceAmount: toDecimal(tx.sourceAmountStroops),
           SourceCurrency: tx.sourceCurrency,
           "XLM Balance": toDecimal(tx.balances.XLM),
@@ -247,6 +261,7 @@ const exportToCsv = (output: Output) => {
           Type: tx.type,
           Amount: toDecimal(tx.amountStroops),
           Currency: tx.currency,
+          Fee: toDecimal(tx.feeStroops),
           From: tx.fromAddress,
           To: tx.toAddress,
           "XLM Balance": toDecimal(tx.balances.XLM),
@@ -262,6 +277,7 @@ const exportToCsv = (output: Output) => {
         "Type",
         "Amount",
         "Currency",
+        "Fee",
         "SourceAmount",
         "SourceCurrency",
         "From",
