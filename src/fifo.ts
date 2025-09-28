@@ -1,7 +1,5 @@
-import { Horizon } from "@stellar/stellar-sdk";
 import { stringify } from "csv-stringify/sync";
-
-const horizonServer = new Horizon.Server("https://horizon.stellar.org");
+import { fetchTransactionsWithOps, TxWithOps } from "./stellar-network";
 
 // Get transactions and calculate their taxes with first in first out
 async function main() {
@@ -15,75 +13,14 @@ async function main() {
   try {
     console.log(`Fetching transactions for wallet: ${walletAddress}`);
 
-    const allTransactions: TxWithOps[] = await fetchTransactionsWithOps(
-      horizonServer,
-      walletAddress,
-    );
+    const allTransactions: TxWithOps[] =
+      await fetchTransactionsWithOps(walletAddress);
 
     const txRows = await processTransactions(allTransactions, walletAddress);
     exportToCsv(txRows);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   }
-}
-
-type TxWithOps = {
-  tx: Horizon.ServerApi.TransactionRecord;
-  ops: Horizon.ServerApi.OperationRecord[];
-};
-
-export async function fetchTransactionsWithOps(
-  hs: Horizon.Server,
-  wallet: string,
-): Promise<TxWithOps[]> {
-  console.log(`Fetching transactions...`);
-
-  // 1) Fetch ALL txs for the account (paginated)
-  let page = await hs
-    .transactions()
-    .forAccount(wallet)
-    .limit(200)
-    .order("asc")
-    .call();
-  const txs: Horizon.ServerApi.TransactionRecord[] = [];
-  while (true) {
-    txs.push(...page.records);
-    if (page.records.length < 200) break;
-    page = await page.next();
-  }
-  console.log(`Fetched ${txs.length} transactions.`);
-
-  // 2) For each tx, fetch its operations (paginated just in case)
-  console.log(`Fetching operations...`);
-  const result: TxWithOps[] = [];
-  for (const tx of txs) {
-    let opPage = await hs
-      .operations()
-      .forTransaction(tx.hash)
-      .limit(200)
-      .order("asc")
-      .call();
-    const ops: Horizon.ServerApi.OperationRecord[] = [];
-    while (true) {
-      // this bullshit is to filter out dusting attacks' ops to other wallets
-      const opsForWallet = opPage.records.filter((op) => {
-        if (op.type === "payment") {
-          return op.source_account === wallet || op.to === wallet;
-        }
-        if (op.type === "create_claimable_balance") {
-          return op.claimants.some((c) => c.destination === wallet);
-        }
-        return true;
-      });
-      ops.push(...opsForWallet);
-      if (opPage.records.length < 200) break;
-      opPage = await opPage.next();
-    }
-    result.push({ tx, ops });
-  }
-  console.log(`Fetched all operations.`);
-
-  return result;
 }
 
 type Currency = "XLM" | "USDC" | "EURC";
@@ -152,13 +89,14 @@ export async function processTransactions(
     // Apply operation effects
     for (const op of ops) {
       if (op.type === "create_account") {
+        const amountStroops = toStroops(op.starting_balance);
         rowOps.push({
           kind: "create_account",
           from: op.funder,
           to: walletAddress,
-          amountStroops: toStroops(op.starting_balance),
+          amountStroops,
         });
-        balances.XLM = toStroops(op.starting_balance);
+        balances.XLM = amountStroops;
       } else if (op.type === "payment") {
         const currency = toCurrency(op.asset_type, op.asset_code);
         if (op.to === walletAddress) {

@@ -5,9 +5,7 @@ import { Horizon } from "@stellar/stellar-sdk";
 
 const myWalletAddress = "GC7...";
 
-const buildCreateAccountTx = (
-  startingBalance: string,
-) => {
+const buildCreateAccountTx = (startingBalance: string) => {
   const tx = {
     hash: "tx1",
     created_at: "2024-01-01T00:00:00Z",
@@ -15,12 +13,14 @@ const buildCreateAccountTx = (
     fee_account: "GBX...",
   } as Horizon.ServerApi.TransactionRecord;
 
-  const ops = [{
-    type: "create_account",
-    starting_balance: startingBalance,
-    created_at: "2024-01-01T00:00:00Z",
-    funder: "GBX...",
-  }] as Horizon.ServerApi.OperationRecord[];
+  const ops = [
+    {
+      type: "create_account",
+      starting_balance: startingBalance,
+      created_at: "2024-01-01T00:00:00Z",
+      funder: "GBX...",
+    },
+  ] as Horizon.ServerApi.OperationRecord[];
 
   return { tx, ops };
 };
@@ -39,7 +39,7 @@ describe("processTransactions", () => {
     expect(txRow.date).toStrictEqual(new Date("2024-01-01T00:00:00Z"));
     expect(txRow.feeStroops).toBe(0n); // fee_account is not our wallet
     expect(txRow.ops).toHaveLength(1);
-    
+
     const op = txRow.ops[0];
     if (op.kind !== "create_account") {
       fail("Operation kind is not create_account");
@@ -63,14 +63,16 @@ describe("processTransactions", () => {
           fee_charged: "100",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          type: "payment",
-          from: myWalletAddress,
-          to: "GAZ...",
-          amount: "100.0000000",
-          asset_type: "native",
-          created_at: "2024-01-02T00:00:00Z",
-        }] as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            type: "payment",
+            from: myWalletAddress,
+            to: "GAZ...",
+            amount: "100.0000000",
+            asset_type: "native",
+            created_at: "2024-01-02T00:00:00Z",
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
       },
       {
         tx: {
@@ -79,22 +81,21 @@ describe("processTransactions", () => {
           fee_charged: "100",
           fee_account: "GAZ...",
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          type: "payment",
-          from: "GAZ...",
-          to: myWalletAddress,
-          amount: "50.0000000",
-          asset_type: "credit_alphanum4",
-          asset_code: "USDC",
-          created_at: "2024-01-03T00:00:00Z",
-        }] as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            type: "payment",
+            from: "GAZ...",
+            to: myWalletAddress,
+            amount: "50.0000000",
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            created_at: "2024-01-03T00:00:00Z",
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
       },
     ];
 
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(3);
 
@@ -155,26 +156,25 @@ describe("processTransactions", () => {
           fee_charged: "1000",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          type: "path_payment_strict_send",
-          created_at: "2025-04-05T08:31:53Z",
-          asset_type: "credit_alphanum4",
-          asset_code: "USDC",
-          asset_issuer: "GA5...",
-          from: myWalletAddress,
-          to: myWalletAddress,
-          amount: "37702.4250015",
-          path: [],
-          source_amount: "147939.5651000",
-          destination_min: "37569.3647033",
-          source_asset_type: "native",
-        }] as unknown as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            type: "path_payment_strict_send",
+            created_at: "2025-04-05T08:31:53Z",
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            asset_issuer: "GA5...",
+            from: myWalletAddress,
+            to: myWalletAddress,
+            amount: "37702.4250015",
+            path: [],
+            source_amount: "147939.5651000",
+            destination_min: "37569.3647033",
+            source_asset_type: "native",
+          },
+        ] as unknown as Horizon.ServerApi.OperationRecord[],
       },
     ];
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(2);
 
@@ -207,36 +207,35 @@ describe("processTransactions", () => {
           fee_charged: "1000",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          transaction_successful: true,
-          source_account: myWalletAddress,
-          type: "path_payment_strict_send",
-          created_at: "2025-06-29T17:47:39Z",
-          asset_type: "credit_alphanum12",
-          asset_code: "yUSDC",
-          asset_issuer: "GDG...",
-          from: myWalletAddress,
-          to: "GAB...",
-          amount: "0.0118384",
-          path: [
-            {
-              asset_type: "credit_alphanum4",
-              asset_code: "USDC",
-              asset_issuer: "GA5...",
-            },
-          ],
-          source_amount: "0.0101149",
-          destination_min: "0.0000001",
-          source_asset_type: "native",
-          source_asset_issuer: "GDH...",
-        }] as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            transaction_successful: true,
+            source_account: myWalletAddress,
+            type: "path_payment_strict_send",
+            created_at: "2025-06-29T17:47:39Z",
+            asset_type: "credit_alphanum12",
+            asset_code: "yUSDC",
+            asset_issuer: "GDG...",
+            from: myWalletAddress,
+            to: "GAB...",
+            amount: "0.0118384",
+            path: [
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDC",
+                asset_issuer: "GA5...",
+              },
+            ],
+            source_amount: "0.0101149",
+            destination_min: "0.0000001",
+            source_asset_type: "native",
+            source_asset_issuer: "GDH...",
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
       },
     ];
 
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(2);
 
@@ -269,29 +268,28 @@ describe("processTransactions", () => {
           fee_charged: "123000",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          transaction_successful: true,
-          source_account: myWalletAddress,
-          type: "invoke_host_function",
-          created_at: "2024-01-09T00:00:00Z",
-          asset_balance_changes: [
-            {
-              asset_type: "native",
-              asset_issuer: "GDH...",
-              type: "transfer",
-              from: myWalletAddress,
-              to: "CAJ...",
-              amount: "820.7219053",
-            },
-          ],
-        }] as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            transaction_successful: true,
+            source_account: myWalletAddress,
+            type: "invoke_host_function",
+            created_at: "2024-01-09T00:00:00Z",
+            asset_balance_changes: [
+              {
+                asset_type: "native",
+                asset_issuer: "GDH...",
+                type: "transfer",
+                from: myWalletAddress,
+                to: "CAJ...",
+                amount: "820.7219053",
+              },
+            ],
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
       },
     ];
 
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const blendDepositRow = txRows[1];
     expect(blendDepositRow.transactionHash).toBe("tx2");
@@ -321,29 +319,28 @@ describe("processTransactions", () => {
           fee_charged: "123000",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          type: "invoke_host_function",
-          source_account: myWalletAddress,
-          created_at: "2024-01-08T00:00:00Z",
-          asset_balance_changes: [
-            {
-              asset_type: "credit_alphanum4",
-              asset_code: "USDC",
-              asset_issuer: "GDH...",
-              type: "transfer",
-              from: "CAJ...",
-              to: myWalletAddress,
-              amount: "0.0118384",
-            },
-          ],
-        }] as Horizon.ServerApi.OperationRecord[],
+        ops: [
+          {
+            type: "invoke_host_function",
+            source_account: myWalletAddress,
+            created_at: "2024-01-08T00:00:00Z",
+            asset_balance_changes: [
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDC",
+                asset_issuer: "GDH...",
+                type: "transfer",
+                from: "CAJ...",
+                to: myWalletAddress,
+                amount: "0.0118384",
+              },
+            ],
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
       },
     ];
 
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const blendWithdrawRow = txRows[1];
     expect(blendWithdrawRow.transactionHash).toBe("tx2");
@@ -373,36 +370,35 @@ describe("processTransactions", () => {
           fee_charged: "123000",
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
-        ops: [{
-          type: "path_payment_strict_receive",
-          source_account: myWalletAddress,
-          created_at: "2024-01-07T00:00:00Z",
-          source_asset_type: "native",
-          asset_type: "credit_alphanum4",
-          asset_code: "USDC",
-          from: myWalletAddress,
-          to: myWalletAddress,
-          source_amount: "90.0000000",
-          amount: "41.0000000",
-        }, {
-          type: "path_payment_strict_send",
-          source_account: myWalletAddress,
-          created_at: "2024-01-07T00:00:00Z",
-          source_asset_type: "credit_alphanum4",
-          source_asset_code: "USDC",
-          asset_issuer: "GDH...",
-          from: myWalletAddress,
-          to: "GBB...",
-          source_amount: "0.0118384",
-        }
+        ops: [
+          {
+            type: "path_payment_strict_receive",
+            source_account: myWalletAddress,
+            created_at: "2024-01-07T00:00:00Z",
+            source_asset_type: "native",
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            from: myWalletAddress,
+            to: myWalletAddress,
+            source_amount: "90.0000000",
+            amount: "41.0000000",
+          },
+          {
+            type: "path_payment_strict_send",
+            source_account: myWalletAddress,
+            created_at: "2024-01-07T00:00:00Z",
+            source_asset_type: "credit_alphanum4",
+            source_asset_code: "USDC",
+            asset_issuer: "GDH...",
+            from: myWalletAddress,
+            to: "GBB...",
+            source_amount: "0.0118384",
+          },
         ] as Horizon.ServerApi.OperationRecord[],
       },
     ];
 
-    const txRows = await processTransactions(
-      mockTxWithOps,
-      myWalletAddress,
-    );
+    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const swapRow = txRows[1];
     expect(swapRow.transactionHash).toBe("tx2");
