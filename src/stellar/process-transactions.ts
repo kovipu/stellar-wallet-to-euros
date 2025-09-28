@@ -1,81 +1,11 @@
-import { stringify } from "csv-stringify/sync";
-import { fetchTransactionsWithOps, TxWithOps } from "./stellar-network";
+import { toCurrency, toStroops } from "../domain/units";
+import { TxWithOps } from "./horizon";
 
-// Get transactions and calculate their taxes with first in first out
-async function main() {
-  const walletAddress = process.argv[2];
-
-  if (!walletAddress) {
-    console.error("Usage: tsx script.py.ts <stellar-wallet-address>");
-    process.exit(1);
-  }
-
-  try {
-    console.log(`Fetching transactions for wallet: ${walletAddress}`);
-
-    const allTransactions: TxWithOps[] =
-      await fetchTransactionsWithOps(walletAddress);
-
-    const txRows = await processTransactions(allTransactions, walletAddress);
-    exportToCsv(txRows);
-  } catch (error) {
-    console.error("Error:", (error as Error).message);
-  }
-}
-
-type Currency = "XLM" | "USDC" | "EURC";
-
-type Balances = Record<Currency, bigint>;
-
-type TxRow = {
-  transactionHash: string;
-  date: Date;
-  feeStroops: bigint; // applied once per tx (0 if not your fee)
-  ops: TxOpSummary[]; // human-friendly summary of what changed
-  balances: Balances; // snapshot after this tx
-};
-
-type TxOpSummary =
-  | { kind: "create_account"; from: string; to: string; amountStroops: bigint }
-  | {
-      kind: "payment";
-      direction: "in" | "out";
-      from: string;
-      to: string;
-      currency: Currency;
-      amountStroops: bigint;
-    }
-  | {
-      kind: "swap";
-      sourceCurrency: Currency;
-      sourceAmountStroops: bigint;
-      destinationCurrency: Currency;
-      destinationAmountStroops: bigint;
-    }
-  | {
-      kind: "blend_deposit" | "blend_withdraw";
-      from: string;
-      to: string;
-      currency: Currency;
-      amountStroops: bigint;
-    }
-  | {
-      kind: "change_trust";
-      currency: Currency;
-    }
-  | {
-      kind: "set_options";
-    }
-  | {
-      kind: "create_claimable_balance";
-      amount: string;
-      currency: string;
-    };
-
-export async function processTransactions(
+/** Process all transactions and calculate the running balance */
+export function processTransactions(
   transactions: TxWithOps[],
   walletAddress: string,
-): Promise<TxRow[]> {
+): TxRow[] {
   const txRows: TxRow[] = [];
   const balances: Balances = {
     XLM: 0n,
@@ -221,79 +151,4 @@ export async function processTransactions(
     });
   }
   return txRows;
-}
-
-// Convert amount to BigInt stroops.
-const toStroops = (amount: string): bigint => {
-  // Remove commas first
-  const cleanAmount = amount.replace(",", "");
-
-  // Split by decimal point
-  const parts = cleanAmount.split(".");
-
-  if (parts.length === 1) {
-    // No decimal point - this is already in stroops (like fees from API)
-    return BigInt(parts[0]);
-  } else if (parts.length === 2) {
-    // Has decimal point - convert from XLM to stroops
-    const integerPart = parts[0];
-    const decimalPart = parts[1].padEnd(7, "0").slice(0, 7); // Pad to 7 digits and truncate if longer
-
-    return BigInt(integerPart) * 10000000n + BigInt(decimalPart);
-  } else {
-    throw new Error(`Invalid amount format: ${amount}`);
-  }
-};
-
-const toDecimal = (amount: bigint): string => {
-  const amountStr = amount.toString();
-  const decimalPart = amountStr.slice(-7).padStart(7, "0");
-  const integerPart = amountStr.slice(0, -7) || "0";
-  return `${integerPart},${decimalPart}`;
-};
-
-const toCurrency = (
-  assetType: string,
-  assetCode: string | undefined,
-): Currency => {
-  if (assetType === "native") {
-    return "XLM";
-  }
-  if (!assetCode) {
-    throw new Error("Asset code is required");
-  }
-  return assetCode as Currency;
-};
-
-const exportToCsv = (output: TxRow[]) => {
-  const outputCsv = stringify(
-    output.map((tx) => {
-      return {
-        Date: tx.date.toISOString(),
-        Type: tx.ops.map((op) => op.kind).join(", "),
-        Fee: toDecimal(tx.feeStroops),
-        "XLM Balance": toDecimal(tx.balances.XLM),
-        "USDC Balance": toDecimal(tx.balances.USDC),
-        "EURC Balance": toDecimal(tx.balances.EURC),
-        "Transaction Explorer": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
-      };
-    }),
-    {
-      header: true,
-      columns: [
-        "Date",
-        "Type",
-        "Fee",
-        "XLM Balance",
-        "USDC Balance",
-        "EURC Balance",
-        "Transaction Explorer",
-      ],
-    },
-  );
-  console.log(outputCsv);
-};
-
-if (require.main === module) {
-  main();
 }

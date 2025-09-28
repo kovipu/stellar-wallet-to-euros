@@ -7,6 +7,7 @@ export type TxWithOps = {
   ops: Horizon.ServerApi.OperationRecord[];
 };
 
+/** Fetch all the transactions with operations for the wallet specified */
 export async function fetchTransactionsWithOps(
   wallet: string,
 ): Promise<TxWithOps[]> {

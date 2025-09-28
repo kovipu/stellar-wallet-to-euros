@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { processTransactions } from "./fifo";
 import { fail } from "assert";
 import { Horizon } from "@stellar/stellar-sdk";
+import { processTransactions } from "./process-transactions";
 
 const myWalletAddress = "GC7...";
 
@@ -26,8 +26,8 @@ const buildCreateAccountTx = (startingBalance: string) => {
 };
 
 describe("processTransactions", () => {
-  it("should process a create_account transaction", async () => {
-    const txRows = await processTransactions(
+  it("should process a create_account transaction", () => {
+    const txRows = processTransactions(
       [buildCreateAccountTx("5.0000000")],
       myWalletAddress,
     );
@@ -53,7 +53,7 @@ describe("processTransactions", () => {
     expect(txRow.balances.EURC).toBe(0n);
   });
 
-  it("should process a mix of create_account and payment operations", async () => {
+  it("should process a mix of create_account and payment operations", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("1000.0000000"),
       {
@@ -95,7 +95,7 @@ describe("processTransactions", () => {
       },
     ];
 
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(3);
 
@@ -146,7 +146,7 @@ describe("processTransactions", () => {
     expect(txRows[2].balances.EURC).toBe(0n);
   });
 
-  it("should process a swap transaction", async () => {
+  it("should process a swap transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("150000.0000000"),
       {
@@ -174,7 +174,7 @@ describe("processTransactions", () => {
         ] as unknown as Horizon.ServerApi.OperationRecord[],
       },
     ];
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(2);
 
@@ -197,7 +197,7 @@ describe("processTransactions", () => {
     expect(swapRow.balances.EURC).toBe(0n);
   });
 
-  it("should process swap_fee transaction", async () => {
+  it("should process swap_fee transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -235,7 +235,7 @@ describe("processTransactions", () => {
       },
     ];
 
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
 
     expect(txRows).toHaveLength(2);
 
@@ -258,7 +258,7 @@ describe("processTransactions", () => {
     expect(swapFeeRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle Blend deposit", async () => {
+  it("should handle Blend deposit", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("1000.0000000"),
       {
@@ -289,7 +289,7 @@ describe("processTransactions", () => {
       },
     ];
 
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const blendDepositRow = txRows[1];
     expect(blendDepositRow.transactionHash).toBe("tx2");
@@ -309,7 +309,7 @@ describe("processTransactions", () => {
     expect(blendDepositRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle Blend withdraw", async () => {
+  it("should handle Blend withdraw", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -340,7 +340,7 @@ describe("processTransactions", () => {
       },
     ];
 
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const blendWithdrawRow = txRows[1];
     expect(blendWithdrawRow.transactionHash).toBe("tx2");
@@ -360,7 +360,7 @@ describe("processTransactions", () => {
     expect(blendWithdrawRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle multiple operations in a single transaction", async () => {
+  it("should handle multiple operations in a single transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -398,7 +398,7 @@ describe("processTransactions", () => {
       },
     ];
 
-    const txRows = await processTransactions(mockTxWithOps, myWalletAddress);
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
     expect(txRows).toHaveLength(2);
     const swapRow = txRows[1];
     expect(swapRow.transactionHash).toBe("tx2");
