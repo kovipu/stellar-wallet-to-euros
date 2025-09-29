@@ -1,4 +1,8 @@
 export const STROOPS_PER_UNIT = 10_000_000n; // 7 decimal places
+export const MICRO_PER_EUR = 1_000_000n; // 6 decimal places
+const STROOPSxMICRO_PER_CENT = STROOPS_PER_UNIT * (MICRO_PER_EUR / 100n); // 10^11
+
+export const DAY_IN_MS = 86_400_000;
 
 export const toCurrency = (
   assetType: string,
@@ -36,4 +40,26 @@ export const toDecimal = (stroops: bigint): string => {
   const decimalPart = amountStr.slice(-7).padStart(7, "0");
   const integerPart = amountStr.slice(0, -7) || "0";
   return `${integerPart},${decimalPart}`;
+};
+
+export const valueCentsFromStroops = (
+  amountStroops: bigint,
+  priceMicro: bigint,
+): bigint => {
+  const num = amountStroops * priceMicro; // stroops * micro-EUR
+
+  // round cents half-up. Supports negative numbers as well.
+  if (num >= 0n) {
+    return (num + STROOPSxMICRO_PER_CENT / 2n) / STROOPSxMICRO_PER_CENT;
+  } else {
+    return (num - STROOPSxMICRO_PER_CENT / 2n) / STROOPSxMICRO_PER_CENT;
+  }
+};
+
+export const formatCents = (cents: bigint): string => {
+  const sign = cents < 0n ? "-" : "";
+  const abs = cents < 0n ? -cents : cents;
+  const euros = abs / 100n;
+  const rem = (abs % 100n).toString().padStart(2, "0");
+  return `${sign}${euros},${rem}`;
 };

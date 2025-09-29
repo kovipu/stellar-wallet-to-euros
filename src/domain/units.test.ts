@@ -25,12 +25,12 @@ describe("toStroops", () => {
   });
 
   it("parses dot-decimals to 7 decimals (pad)", () => {
-    expect(toStroops("1.2")).toBe(12_000_000n);           // 1.2 -> 12,000,000 stroops
-    expect(toStroops("1.0000000")).toBe(10_000_000n);     // exact 7 dp
-    expect(toStroops("0.0000001")).toBe(1n);              // 1 stroop
-    expect(toStroops("0.000001")).toBe(10n);              // 10 stroops
-    expect(toStroops(".5")).toBe(5_000_000n);             // leading dot
-    expect(toStroops("3.")).toBe(30_000_000n);            // trailing dot
+    expect(toStroops("1.2")).toBe(12_000_000n); // 1.2 -> 12,000,000 stroops
+    expect(toStroops("1.0000000")).toBe(10_000_000n); // exact 7 dp
+    expect(toStroops("0.0000001")).toBe(1n); // 1 stroop
+    expect(toStroops("0.000001")).toBe(10n); // 10 stroops
+    expect(toStroops(".5")).toBe(5_000_000n); // leading dot
+    expect(toStroops("3.")).toBe(30_000_000n); // trailing dot
   });
 
   it("truncates beyond 7 decimals (no rounding)", () => {
@@ -38,7 +38,6 @@ describe("toStroops", () => {
     expect(toStroops("1.23456789")).toBe(12_345_678n);
     // 0.00000019 -> keep "0000001"
     expect(toStroops("0.00000019")).toBe(1n);
-
   });
   it("handles big values", () => {
     expect(toStroops("1234567890.1234567")).toBe(12_345_678_901_234_567n);
@@ -50,6 +49,8 @@ describe("toStroops", () => {
   });
 
   it("throws if cannot parse", () => {
-    expect(() => toStroops("asdf")).toThrowError(new SyntaxError('Cannot convert asdf to a BigInt'))
-  })
+    expect(() => toStroops("asdf")).toThrowError(
+      new SyntaxError("Cannot convert asdf to a BigInt"),
+    );
+  });
 });
