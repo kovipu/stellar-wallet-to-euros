@@ -1,5 +1,5 @@
 import { writeFileSync } from "fs";
-import { Batch, Fill } from "../report/fifo";
+import { AcqKind, Batch, DispKind, Fill } from "../report/fifo";
 import { formatCents, formatPriceMicro, toDecimal } from "../domain/units";
 import { stringify } from "csv-stringify/sync";
 
@@ -7,39 +7,58 @@ import { stringify } from "csv-stringify/sync";
 
 export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
   const rows = fills.map((f) => ({
-    "Disposed At (UTC)": f.disposedAt.toISOString(),
-    "Disposal kind": f.dispKind,
-    "Tx Hash": f.txHash,
-    Currency: f.currency,
-    "Qty (units)": toDecimal(f.amountStroops),
-    "Batch ID": f.batchId,
-    "Acquired At (UTC)": f.acquiredAt.toISOString(),
-    "Acq Price (EUR/unit)": formatPriceMicro(f.acqPriceMicro),
-    "Disp Price (EUR/unit)": formatPriceMicro(f.dispPriceMicro),
-    "Proceeds (EUR)": formatCents(f.proceedsCents),
-    "Cost (EUR)": formatCents(f.costCents),
-    "P/L (EUR)": formatCents(f.gainLossCents),
+    "Luovutushetki (UTC)": f.disposedAt.toISOString(),
+    "Luovutuksen tyyppi": dispKindFi(f.dispKind),
+    Valuutta: f.currency,
+    Määrä: toDecimal(f.amountStroops),
+    "Erä ID": f.batchId,
+    "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
+    "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
+    "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
+    "Luovutushinta (€)": formatCents(f.proceedsCents),
+    "Hankintameno (€)": formatCents(f.costCents),
+    "Voitto/Tappio (€)": formatCents(f.gainLossCents),
+    "Transaction Hash": f.txHash,
   }));
 
   // Use semicolon so Excel (EU locale) parses numbers with comma decimals nicely
   return stringify(rows, {
     header: true,
     columns: [
-      "Disposed At (UTC)",
-      "Disposal kind",
-      "Tx Hash",
-      "Currency",
-      "Qty (units)",
-      "Batch ID",
-      "Acquired At (UTC)",
-      "Acq Price (EUR/unit)",
-      "Disp Price (EUR/unit)",
-      "Proceeds (EUR)",
-      "Cost (EUR)",
-      "P/L (EUR)",
+      "Luovutushetki (UTC)",
+      "Luovutuksen tyyppi",
+      "Valuutta",
+      "Määrä",
+      "Erä ID",
+      "Hankintahetki (UTC)",
+      "Hankintahinta (€/kpl)",
+      "Luovutushinta (€/kpl)",
+      "Luovutushinta (€)",
+      "Hankintameno (€)",
+      "Voitto/Tappio (€)",
+      "Transaction Hash",
     ],
   });
 }
+
+// Finnish labels
+export const acqKindFi = (k: AcqKind): string =>
+  ({
+    create_account: "Tilin rahoitus",
+    payment_in: "Maksu sisään",
+    swap_in: "Vaihto (sisään)",
+    blend_withdraw: "Blend-nosto",
+    eurc_par: "EURC nimellisarvo",
+  })[k];
+
+export const dispKindFi = (k: DispKind): string =>
+  ({
+    payment_out: "Maksu ulos",
+    swap_out: "Vaihto (ulos)",
+    blend_deposit: "Blend-talletus",
+    swap_fee: "Vaihtopalkkio",
+    network_fee: "Verkkopalkkio",
+  })[k];
 
 export function writeFillsCsvFile(
   fills: ReadonlyArray<Fill>,
@@ -57,15 +76,15 @@ export function buildInventoryCsv(ending: Record<string, Batch[]>): string {
     for (const b of batches) {
       if (b.qtyRemainingStroops === 0n) continue;
       rows.push({
-        Currency: currency,
-        "Batch ID": b.batchId,
-        "Acquired At (UTC)": b.acquiredAt.toISOString(),
-        "Acq Price (EUR/unit)": formatPriceMicro(b.priceMicroAtAcq),
-        "Qty Initial (units)": toDecimal(b.qtyInitialStroops),
-        "Qty Remaining (units)": toDecimal(b.qtyRemainingStroops),
+        Valuutta: currency,
+        "Erä ID": b.batchId,
+        "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
+        "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
+        "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
+        "Erää jäljellä (kpl)": toDecimal(b.qtyRemainingStroops),
         // Remaining cost basis at acquisition price (not marked-to-market)
-        "Remaining Cost (EUR)": formatCents(
-          // qtyRemainingAtomic * acq micro-EUR -> cents (rounded)
+        "Jäljellä oleva hankintameno (€)": formatCents(
+          // qtyRemainingAtomic * acq micro-€ -> cents (rounded)
           // same math as valueCentsFromAtomic but inline to keep this file standalone
           (() => {
             const num = b.qtyRemainingStroops * b.priceMicroAtAcq; // atoms * micro
@@ -80,13 +99,13 @@ export function buildInventoryCsv(ending: Record<string, Batch[]>): string {
   return stringify(rows, {
     header: true,
     columns: [
-      "Currency",
-      "Batch ID",
-      "Acquired At (UTC)",
-      "Acq Price (EUR/unit)",
-      "Qty Initial (units)",
-      "Qty Remaining (units)",
-      "Remaining Cost (EUR)",
+      "Valuutta",
+      "Erä ID",
+      "Hankintahetki (UTC)",
+      "Hankintahinta (€/kpl)",
+      "Erän koko (kpl)",
+      "Erää jäljellä (kpl)",
+      "Jäljellä oleva hankintameno (€)",
     ],
   });
 }

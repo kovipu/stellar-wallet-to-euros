@@ -9,42 +9,39 @@ export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook) => {
   const view = txRows.map((tx) => {
     const { balances, feeEurCents } = valueTxInEUR(tx, priceBook);
     return {
-      Date: tx.date.toISOString(),
-      Type: tx.ops.map((op) => op.kind).join(", "),
-      Fee: toDecimal(tx.feeStroops),
-      "Fee (EUR)": formatCents(feeEurCents),
-      "XLM Balance": toDecimal(tx.balances.XLM),
-      "USDC Balance": toDecimal(tx.balances.USDC),
-      "EURC Balance": toDecimal(tx.balances.EURC),
-      "XLM Balance (EUR)":
+      "Päivämäärä (UTC)": tx.date.toISOString(),
+      Tyyppi: tx.ops.map((op) => op.kind).join(", "),
+      "Verkkopalkkio (XLM)": toDecimal(tx.feeStroops),
+      "Verkkopalkkio (€)": formatCents(feeEurCents),
+      "XLM-saldo": toDecimal(tx.balances.XLM),
+      "XLM-saldo (€)":
         balances.xlmCents !== undefined ? formatCents(balances.xlmCents) : "",
-      "USDC Balance (EUR)":
+      "USDC-saldo": toDecimal(tx.balances.USDC),
+      "USDC-saldo (€)":
         balances.usdcCents !== undefined ? formatCents(balances.usdcCents) : "",
-      "EURC Balance (EUR)":
-        balances.eurcCents !== undefined ? formatCents(balances.eurcCents) : "",
-      "Total Balance (EUR)":
+      "EURC-saldo": toDecimal(tx.balances.EURC),
+      "Kokonaissaldo (€)":
         balances.totalCents !== undefined
           ? formatCents(balances.totalCents)
           : "",
-      "Transaction Explorer": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
+      "Tapahtuman linkki": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
     };
   });
 
   return stringify(view, {
     header: true,
     columns: [
-      "Date",
-      "Type",
-      "Fee",
-      "Fee (EUR)",
-      "XLM Balance",
-      "USDC Balance",
-      "EURC Balance",
-      "XLM Balance (EUR)",
-      "USDC Balance (EUR)",
-      "EURC Balance (EUR)",
-      "Total Balance (EUR)",
-      "Transaction Explorer",
+      "Päivämäärä (UTC)",
+      "Tyyppi",
+      "Verkkopalkkio (XLM)",
+      "Verkkopalkkio (€)",
+      "XLM-saldo",
+      "XLM-saldo (€)",
+      "USDC-saldo",
+      "USDC-saldo (€)",
+      "EURC-saldo",
+      "Kokonaissaldo (€)",
+      "Tapahtuman linkki",
     ],
   });
 };
