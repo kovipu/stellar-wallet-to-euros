@@ -13,7 +13,6 @@ export type BalanceEuroValuation = {
 
 export type EuroValuation = {
   feeEurCents: Cents; // XLM fee valued in EUR
-  // New: portfolio valuation at end of this tx
   balances: BalanceEuroValuation;
 };
 

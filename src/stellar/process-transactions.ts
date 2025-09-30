@@ -76,8 +76,7 @@ export function processTransactions(
         } else {
           // outbound payment via path
           rowOps.push({
-            kind: "payment",
-            direction: "out",
+            kind: "swap_fee",
             from: op.from,
             to: op.to,
             currency: sourceCurrency,

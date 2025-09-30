@@ -32,6 +32,13 @@ type TxOpSummary =
       destinationAmountStroops: bigint;
     }
   | {
+      kind: "swap_fee";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
+  | {
       kind: "blend_deposit" | "blend_withdraw";
       from: string;
       to: string;

@@ -63,3 +63,11 @@ export const formatCents = (cents: bigint): string => {
   const rem = (abs % 100n).toString().padStart(2, "0");
   return `${sign}${euros},${rem}`;
 };
+
+/** Format a micro euro as string in full accuraccy */
+export const formatPriceMicro = (micro: bigint): string => {
+  // micro-EUR per 1 unit -> string with 6 decimals (comma)
+  const i = micro / 1_000_000n;
+  const frac = (micro % 1_000_000n).toString().padStart(6, "0");
+  return `${i},${frac}`;
+};

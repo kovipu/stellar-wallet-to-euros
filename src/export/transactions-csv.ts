@@ -5,7 +5,7 @@ import { valueTxInEUR } from "../report/valuation";
 import { writeFileSync } from "fs";
 
 /** Convert TxRows to a csv format and log to console for now */
-export const buildCsv = (txRows: TxRow[], priceBook: PriceBook) => {
+export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook) => {
   const view = txRows.map((tx) => {
     const { balances, feeEurCents } = valueTxInEUR(tx, priceBook);
     return {
@@ -22,6 +22,10 @@ export const buildCsv = (txRows: TxRow[], priceBook: PriceBook) => {
         balances.usdcCents !== undefined ? formatCents(balances.usdcCents) : "",
       "EURC Balance (EUR)":
         balances.eurcCents !== undefined ? formatCents(balances.eurcCents) : "",
+      "Total Balance (EUR)":
+        balances.totalCents !== undefined
+          ? formatCents(balances.totalCents)
+          : "",
       "Transaction Explorer": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
     };
   });
@@ -39,17 +43,18 @@ export const buildCsv = (txRows: TxRow[], priceBook: PriceBook) => {
       "XLM Balance (EUR)",
       "USDC Balance (EUR)",
       "EURC Balance (EUR)",
+      "Total Balance (EUR)",
       "Transaction Explorer",
     ],
   });
 };
 
-export function writeCsvFile(
+export function writeTransactionsCsvFile(
   txRows: TxRow[],
   priceBook: PriceBook,
   filePath = "report.csv",
 ): void {
-  const csv = buildCsv(txRows, priceBook);
+  const csv = buildTransactionsCsv(txRows, priceBook);
   writeFileSync(filePath, csv, "utf8");
-  console.log(`CSV written: ${filePath}`);
+  console.log(`Wrote ${filePath}`);
 }

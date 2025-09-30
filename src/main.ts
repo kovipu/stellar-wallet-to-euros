@@ -1,8 +1,10 @@
 import { processTransactions } from "./stellar/process-transactions";
 import { fetchTransactionsWithOps } from "./stellar/horizon";
-import { writeCsvFile } from "./export/csv";
+import { writeTransactionsCsvFile } from "./export/transactions-csv";
 import { loadPriceCache, saveCache } from "./pricing/price-cache";
 import { buildPriceBook } from "./pricing/price-service";
+import { computeFifoFills } from "./report/fifo";
+import { writeFillsCsvFile, writeInventoryCsvFile } from "./export/fifo-csv";
 
 // Get transactions and calculate their taxes with first in first out
 async function main() {
@@ -25,7 +27,11 @@ async function main() {
 
     const priceBook = await buildPriceBook(txRows, cache);
 
-    writeCsvFile(txRows, priceBook)
+    const { fills, endingBatches } = computeFifoFills(txRows, priceBook)
+
+    writeTransactionsCsvFile(txRows, priceBook)
+    writeFillsCsvFile(fills)
+    writeInventoryCsvFile(endingBatches)
   } catch (error) {
     console.error("Error:", (error as Error).message);
   } finally {
