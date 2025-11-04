@@ -3,14 +3,25 @@ import { formatCents, toDecimal } from "../domain/units";
 import { PriceBook } from "../pricing/price-service";
 import { valueTxInEUR } from "../report/valuation";
 import { writeFileSync } from "fs";
+import { Fill } from "../report/fifo";
 
 /** Convert TxRows to a csv format and log to console for now */
-export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook) => {
+export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook, fills: ReadonlyArray<Fill>) => {
+  const plByTx = indexFillsByTx(fills);
+
   const view = txRows.map((tx) => {
-    const { balances, feeEurCents } = valueTxInEUR(tx, priceBook);
+    const { balances, feeEurCents, flow } = valueTxInEUR(tx, priceBook);
+    const agg = plByTx.get(tx.transactionHash) ?? { proceeds: 0n, cost: 0n, pl: 0n };
+
     return {
       "Päivämäärä (UTC)": tx.date.toISOString(),
       Tyyppi: tx.ops.map((op) => op.kind).join(", "),
+      "Arvo sisään (€)": formatCents(flow.inCents),
+      "Arvo ulos (€)": formatCents(flow.outCents),
+      "Nettoarvo (€)": formatCents(flow.netCents),
+      "Luovutushinta (€)": formatCents(agg.proceeds),
+      "Hankintameno (€)": formatCents(agg.cost),
+      "FIFO-voitto/tappio (€)": formatCents(agg.pl),
       "Verkkopalkkio (XLM)": toDecimal(tx.feeStroops),
       "Verkkopalkkio (€)": formatCents(feeEurCents),
       "XLM-saldo": toDecimal(tx.balances.XLM),
@@ -33,6 +44,12 @@ export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook) => {
     columns: [
       "Päivämäärä (UTC)",
       "Tyyppi",
+      "Arvo sisään (€)",
+      "Arvo ulos (€)",
+      "Nettoarvo (€)",
+      "Luovutushinta (€)",
+      "Hankintameno (€)",
+      "FIFO-voitto/tappio (€)",
       "Verkkopalkkio (XLM)",
       "Verkkopalkkio (€)",
       "XLM-saldo",
@@ -49,9 +66,25 @@ export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook) => {
 export function writeTransactionsCsvFile(
   txRows: TxRow[],
   priceBook: PriceBook,
+  fills: ReadonlyArray<Fill>,
   filePath = "report.csv",
 ): void {
-  const csv = buildTransactionsCsv(txRows, priceBook);
+  const csv = buildTransactionsCsv(txRows, priceBook, fills);
   writeFileSync(filePath, csv, "utf8");
   console.log(`Wrote ${filePath}`);
+}
+
+type FillByTx = Map<string, { proceeds: bigint; cost: bigint; pl: bigint }>;
+
+function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
+  const m: FillByTx = new Map();
+  for (const f of fills) {
+    const cur = m.get(f.txHash) ?? { proceeds: 0n, cost: 0n, pl: 0n };
+    m.set(f.txHash, {
+      proceeds: cur.proceeds + f.proceedsCents,
+      cost: cur.cost + f.costCents,
+      pl: cur.pl + f.gainLossCents,
+    });
+  }
+  return m;
 }

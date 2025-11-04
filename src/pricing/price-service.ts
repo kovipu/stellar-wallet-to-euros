@@ -16,32 +16,52 @@ export async function buildPriceBook(
   txRows: ReadonlyArray<TxRow>,
   cache: PriceCache,
 ): Promise<PriceBook> {
-  // Collect unique (asset, day) pairs we actually need prices for (skip dust).
-  const neededPrices = new Set<string>();
+  // 1) Unique UTC date keys across all txs
+  const dateKeys = Array.from(
+    new Set(txRows.map((r) => dateKeyUTC(r.date))).values()
+  ).sort();
 
-  for (const { date, feeStroops, ops } of txRows) {
-    const dateKey = dateKeyUTC(date);
-    if (feeStroops > 0n) neededPrices.add(priceKey("XLM", dateKey));
+  // 2) Hydrate XLM once over the full range
+  // await hydrateXlmRangeAround(dateKeys, cache);
 
-    for (const op of ops) {
-      if (op.kind === "create_account") {
-        neededPrices.add(priceKey("XLM", dateKey));
-      } else if (op.kind === "payment") {
-        neededPrices.add(priceKey(op.currency, dateKey));
-      } else if (op.kind == "swap") {
-        neededPrices.add(priceKey(op.sourceCurrency, dateKey));
-        neededPrices.add(priceKey(op.destinationCurrency, dateKey));
-      } else if (op.kind === "blend_deposit" || op.kind === "blend_withdraw") {
-        neededPrices.add(priceKey(op.currency, dateKey));
+  // 3) Ensure EURC & USDC exist for each day
+  await Promise.all(
+    dateKeys.map(async (dateKey) => {
+      // EURC par (no network)
+      if (!getCachedPrice(cache, "EURC", dateKey)) {
+        putCachedPrice(cache, "EURC", dateKey, {
+          priceMicroEur: MICRO_PER_EUR,
+          source: "par",
+          fetchedAt: Date.now(),
+        });
       }
-    }
-  }
 
-  // Fetch & assemble
+      // USDC via Frankfurter (cached per day)
+      if (!getCachedPrice(cache, "USDC", dateKey)) {
+        const micro = await fetchUsdToEurMicro(dateKey);
+        putCachedPrice(cache, "USDC", dateKey, {
+          priceMicroEur: micro,
+          source: "frankfurter",
+          fetchedAt: Date.now(),
+        });
+      }
+
+      // XLM should already be present from hydration; as a safety net:
+      if (!getCachedPrice(cache, "XLM", dateKey)) {
+        // fallback: tiny hydration around the missing day
+        await hydrateXlmRangeAround(dateKey, cache);
+      }
+    })
+  );
+
+  // 4) Assemble book: all 3 assets × each day
   const book: PriceBook = {};
-  for (const key of neededPrices) {
-    const [currency, dateKey] = key.split(":") as [Currency, string];
-    book[key] = await priceMicroEUR(currency, dateKey + "T00:00:00Z", cache);
+  for (const dk of dateKeys) {
+    for (const c of ["XLM", "USDC", "EURC"] as const) {
+      const entry = getCachedPrice(cache, c, dk);
+      if (!entry) throw new Error(`Missing ${c} price for ${dk}`);
+      book[priceKey(c, dk)] = entry;
+    }
   }
   return book;
 }

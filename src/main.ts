@@ -13,7 +13,7 @@ async function main() {
   const cache = loadPriceCache();
 
   if (!walletAddress) {
-    console.error("Usage: tsx script.py.ts <stellar-wallet-address>");
+    console.error("Usage: tsx main.ts <stellar-wallet-address>");
     process.exit(1);
   }
 
@@ -29,7 +29,7 @@ async function main() {
 
     const { fills, endingBatches } = computeFifoFills(txRows, priceBook)
 
-    writeTransactionsCsvFile(txRows, priceBook)
+    writeTransactionsCsvFile(txRows, priceBook, fills)
     writeFillsCsvFile(fills)
     writeInventoryCsvFile(endingBatches)
   } catch (error) {
