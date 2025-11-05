@@ -137,6 +137,7 @@ async function hydrateXlmRangeAround(
   url.searchParams.set("vs_currency", "eur");
   url.searchParams.set("from", String(fromSec));
   url.searchParams.set("to", String(toSec));
+  url.searchParams.set("x_cg_demo_api_key", process.env.COINGECKO_API_KEY!!);
   const res = await fetch(url);
   const data = await res.json();
   const prices: [number, number][] = data?.prices ?? [];
