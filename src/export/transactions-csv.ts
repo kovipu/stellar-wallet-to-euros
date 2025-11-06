@@ -6,12 +6,20 @@ import { writeFileSync } from "fs";
 import { Fill } from "../report/fifo";
 
 /** Convert TxRows to a csv format and log to console for now */
-export const buildTransactionsCsv = (txRows: TxRow[], priceBook: PriceBook, fills: ReadonlyArray<Fill>) => {
+export const buildTransactionsCsv = (
+  txRows: TxRow[],
+  priceBook: PriceBook,
+  fills: ReadonlyArray<Fill>,
+) => {
   const plByTx = indexFillsByTx(fills);
 
   const view = txRows.map((tx) => {
     const { balances, feeEurCents, flow } = valueTxInEUR(tx, priceBook);
-    const agg = plByTx.get(tx.transactionHash) ?? { proceeds: 0n, cost: 0n, pl: 0n };
+    const agg = plByTx.get(tx.transactionHash) ?? {
+      proceeds: 0n,
+      cost: 0n,
+      pl: 0n,
+    };
 
     return {
       "Päivämäärä (UTC)": tx.date.toISOString(),

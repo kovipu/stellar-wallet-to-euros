@@ -15,14 +15,16 @@ export type EuroValuation = {
   feeEurCents: Cents; // XLM fee valued in EUR
   balances: BalanceEuroValuation;
   flow: {
-    inCents: bigint,
-    outCents: bigint,
-    netCents: bigint,
-    byAsset: FlowByAsset
-  }
+    inCents: bigint;
+    outCents: bigint;
+    netCents: bigint;
+    byAsset: FlowByAsset;
+  };
 };
 
-type FlowByAsset = Partial<Record<Currency, { inCents: bigint, outCents: bigint }>>;
+type FlowByAsset = Partial<
+  Record<Currency, { inCents: bigint; outCents: bigint }>
+>;
 
 export function valueTxInEUR(
   txRow: TxRow,
@@ -37,10 +39,19 @@ export function valueTxInEUR(
     : 0n;
 
   // balances valuation (EUR cents)
-  const xlmCents = valueCentsFromStroops(txRow.balances.XLM, priceMicroAt(priceBook, "XLM", dk))
-  const usdcCents = valueCentsFromStroops(txRow.balances.USDC, priceMicroAt(priceBook, "USDC", dk))
-  const eurcCents = valueCentsFromStroops(txRow.balances.EURC, priceMicroAt(priceBook, "EURC", dk))
-  const totalCents = xlmCents + usdcCents + eurcCents
+  const xlmCents = valueCentsFromStroops(
+    txRow.balances.XLM,
+    priceMicroAt(priceBook, "XLM", dk),
+  );
+  const usdcCents = valueCentsFromStroops(
+    txRow.balances.USDC,
+    priceMicroAt(priceBook, "USDC", dk),
+  );
+  const eurcCents = valueCentsFromStroops(
+    txRow.balances.EURC,
+    priceMicroAt(priceBook, "EURC", dk),
+  );
+  const totalCents = xlmCents + usdcCents + eurcCents;
 
   // per-tx flow (EUR cents)
   let inCents = 0n;
@@ -49,7 +60,10 @@ export function valueTxInEUR(
 
   const addIn = (currency: Currency, stroops: bigint) => {
     if (stroops === 0n) return;
-    const c = valueCentsFromStroops(stroops, priceMicroAt(priceBook, currency, dk));
+    const c = valueCentsFromStroops(
+      stroops,
+      priceMicroAt(priceBook, currency, dk),
+    );
     inCents += c;
     const cur = byAsset[currency] ?? { inCents: 0n, outCents: 0n };
     byAsset[currency] = { ...cur, inCents: cur.inCents + c };
@@ -57,13 +71,16 @@ export function valueTxInEUR(
 
   const addOut = (currency: Currency, stroops: bigint) => {
     if (stroops === 0n) return;
-    const c = valueCentsFromStroops(stroops, priceMicroAt(priceBook, currency, dk));
+    const c = valueCentsFromStroops(
+      stroops,
+      priceMicroAt(priceBook, currency, dk),
+    );
     outCents += c;
     const cur = byAsset[currency] ?? { inCents: 0n, outCents: 0n };
     byAsset[currency] = { ...cur, outCents: cur.outCents + c };
   };
 
-  txRow.ops.forEach(op => {
+  txRow.ops.forEach((op) => {
     if (op.kind === "create_account") {
       addIn("XLM", op.amountStroops);
     } else if (op.kind === "payment") {
@@ -78,7 +95,7 @@ export function valueTxInEUR(
     } else if (op.kind === "swap_fee") {
       addOut(op.currency, op.amountStroops);
     }
-  })
+  });
 
   return {
     feeEurCents,
@@ -92,14 +109,18 @@ export function valueTxInEUR(
       inCents,
       outCents,
       netCents: inCents - outCents,
-      byAsset
-    }
+      byAsset,
+    },
   };
 }
 
-const priceMicroAt = (book: PriceBook, currency: Currency, dateKey: string): bigint => {
+const priceMicroAt = (
+  book: PriceBook,
+  currency: Currency,
+  dateKey: string,
+): bigint => {
   if (currency === "EURC") return MICRO_PER_EUR;
-  const key = priceKey(currency, dateKey)
+  const key = priceKey(currency, dateKey);
   const p = book[key]?.priceMicroEur;
   if (p === undefined) throw new Error(`Missing price for ${key}`);
   return p;

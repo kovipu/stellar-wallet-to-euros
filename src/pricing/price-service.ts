@@ -18,7 +18,7 @@ export async function buildPriceBook(
 ): Promise<PriceBook> {
   // 1) Unique UTC date keys across all txs
   const dateKeys = Array.from(
-    new Set(txRows.map((r) => dateKeyUTC(r.date))).values()
+    new Set(txRows.map((r) => dateKeyUTC(r.date))).values(),
   ).sort();
 
   // 2) Hydrate XLM once over the full range
@@ -51,7 +51,7 @@ export async function buildPriceBook(
         // fallback: tiny hydration around the missing day
         await hydrateXlmRangeAround(dateKey, cache);
       }
-    })
+    }),
   );
 
   // 4) Assemble book: all 3 assets × each day

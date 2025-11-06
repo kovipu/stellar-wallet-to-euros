@@ -88,13 +88,14 @@ export function computeFifoFills(
     return micro;
   };
 
-
   // implied micro-EUR per 1 source unit from the destination leg
   const impliedPerSourceMicro = (
     destAmountStroops: bigint,
     destPriceMicro: bigint,
-    srcAmountStroops: bigint
-  ): bigint => (destAmountStroops * destPriceMicro + srcAmountStroops / 2n) / srcAmountStroops;
+    srcAmountStroops: bigint,
+  ): bigint =>
+    (destAmountStroops * destPriceMicro + srcAmountStroops / 2n) /
+    srcAmountStroops;
 
   const newBatchId = (currency: Exclude<Currency, "EURC">) =>
     `${currency}#${String(++batchSeq[currency]).padStart(4, "0")}`;
@@ -238,7 +239,11 @@ export function computeFifoFills(
       } else if (op.kind === "swap") {
         // anchor proceeds on destination leg
         const destMicro = getPriceMicro(op.destinationCurrency, tx.date);
-        const perSourceMicro = impliedPerSourceMicro(op.destinationAmountStroops, destMicro, op.sourceAmountStroops);
+        const perSourceMicro = impliedPerSourceMicro(
+          op.destinationAmountStroops,
+          destMicro,
+          op.sourceAmountStroops,
+        );
 
         // source = disposal with implied proceeds per unit
         dispose({
@@ -247,7 +252,7 @@ export function computeFifoFills(
           date: tx.date,
           txHash: tx.transactionHash,
           dispKind: "swap_out",
-          proceedsPriceMicro: perSourceMicro
+          proceedsPriceMicro: perSourceMicro,
         });
 
         // destination = acquisition (its acq price is its own market price)

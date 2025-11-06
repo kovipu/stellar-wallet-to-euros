@@ -28,35 +28,47 @@ export async function fetchTransactionsWithOps(
   }
   console.log(`Fetched ${txs.length} transactions.`);
 
-  // 2) For each tx, fetch its operations (paginated just in case)
+  // 2) Fetch ALL operations for the account at once
   console.log(`Fetching operations...`);
-  const result: TxWithOps[] = [];
-  for (const tx of txs) {
-    let opPage = await horizonServer
-      .operations()
-      .forTransaction(tx.hash)
-      .limit(200)
-      .order("asc")
-      .call();
-    const ops: Horizon.ServerApi.OperationRecord[] = [];
-    while (true) {
-      // this bullshit is to filter out dusting attacks' ops to other wallets
-      const opsForWallet = opPage.records.filter((op) => {
-        if (op.type === "payment") {
-          return op.source_account === wallet || op.to === wallet;
-        }
-        if (op.type === "create_claimable_balance") {
-          return op.claimants.some((c) => c.destination === wallet);
-        }
-        return true;
-      });
-      ops.push(...opsForWallet);
-      if (opPage.records.length < 200) break;
-      opPage = await opPage.next();
-    }
-    result.push({ tx, ops });
+  let opPage = await horizonServer
+    .operations()
+    .forAccount(wallet)
+    .limit(200)
+    .order("asc")
+    .call();
+  const allOps: Horizon.ServerApi.OperationRecord[] = [];
+  while (true) {
+    // Filter out dusting attacks' ops to other wallets
+    const opsForWallet = opPage.records.filter((op) => {
+      if (op.type === "payment") {
+        return op.source_account === wallet || op.to === wallet;
+      }
+      if (op.type === "create_claimable_balance") {
+        return op.claimants.some((c) => c.destination === wallet);
+      }
+      return true;
+    });
+    allOps.push(...opsForWallet);
+    if (opPage.records.length < 200) break;
+    opPage = await opPage.next();
   }
-  console.log(`Fetched all operations.`);
+  console.log(`Fetched ${allOps.length} operations.`);
+
+  // 3) Group operations by transaction hash
+  const opsByTxHash = new Map<string, Horizon.ServerApi.OperationRecord[]>();
+  for (const op of allOps) {
+    const txHash = op.transaction_hash;
+    if (!opsByTxHash.has(txHash)) {
+      opsByTxHash.set(txHash, []);
+    }
+    opsByTxHash.get(txHash)!.push(op);
+  }
+
+  // 4) Build TxWithOps array
+  const result: TxWithOps[] = txs.map((tx) => ({
+    tx,
+    ops: opsByTxHash.get(tx.hash) || [],
+  }));
 
   return result;
 }

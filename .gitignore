@@ -3,3 +3,4 @@ dataset
 node_modules
 .env
 price_cache.json
+CLAUDE.md
