@@ -236,7 +236,7 @@ export function computeFifoFills(
           txHash: tx.transactionHash,
           dispKind: "payment_out",
         });
-      } else if (op.kind === "swap") {
+      } else if (op.kind === "swap" || op.kind == "sell_offer") {
         // anchor proceeds on destination leg
         const destMicro = getPriceMicro(op.destinationCurrency, tx.date);
         const perSourceMicro = impliedPerSourceMicro(

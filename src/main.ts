@@ -23,7 +23,7 @@ async function main() {
     const allTransactions =
       await fetchTransactionsWithOps(walletAddress);
 
-    const txRows = processTransactions(allTransactions, walletAddress);
+    const txRows = await processTransactions(allTransactions, walletAddress);
 
     const priceBook = await buildPriceBook(txRows, cache);
 

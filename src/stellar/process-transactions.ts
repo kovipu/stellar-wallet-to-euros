@@ -1,4 +1,4 @@
-import { toCurrency, toStroops } from "../domain/units";
+import { STROOPS_PER_UNIT, toCurrency, toStroops } from "../domain/units";
 import { TxWithOps } from "./horizon";
 
 /** Process all transactions and calculate the running balance */
@@ -131,6 +131,32 @@ export function processTransactions(
           amount: op.amount,
           currency: op.asset,
         });
+      } else if (op.type === "manage_sell_offer") {
+        const sourceCurrency = toCurrency(
+          op.selling_asset_type,
+          op.selling_asset_code,
+        );
+        const destinationCurrency = toCurrency(
+          op.buying_asset_type,
+          op.buying_asset_code,
+        );
+        const sourceAmountStroops = toStroops(op.amount);
+
+        // calculate credited amount
+        const priceStroops = toStroops(op.price);
+        const destinationAmount14 = priceStroops * sourceAmountStroops;
+        const destinationAmountStroops =
+          (destinationAmount14 + STROOPS_PER_UNIT / 2n) / STROOPS_PER_UNIT; // half up to scale 7
+
+        rowOps.push({
+          kind: "sell_offer",
+          sourceCurrency,
+          sourceAmountStroops,
+          destinationCurrency,
+          destinationAmountStroops,
+        });
+        balances[sourceCurrency] -= sourceAmountStroops;
+        balances[destinationCurrency] += destinationAmountStroops;
       } else {
         throw new Error(`Unknown operation type: ${op.type}`);
       }

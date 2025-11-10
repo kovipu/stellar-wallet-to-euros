@@ -26,7 +26,7 @@ const buildCreateAccountTx = (startingBalance: string) => {
 };
 
 describe("processTransactions", () => {
-  it("should process a create_account transaction", () => {
+  it("process a create_account transaction", () => {
     const txRows = processTransactions(
       [buildCreateAccountTx("5.0000000")],
       myWalletAddress,
@@ -53,7 +53,7 @@ describe("processTransactions", () => {
     expect(txRow.balances.EURC).toBe(0n);
   });
 
-  it("should process a mix of create_account and payment operations", () => {
+  it("process a mix of create_account and payment operations", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("1000.0000000"),
       {
@@ -146,7 +146,7 @@ describe("processTransactions", () => {
     expect(txRows[2].balances.EURC).toBe(0n);
   });
 
-  it("should process a swap transaction", () => {
+  it("process a swap transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("150000.0000000"),
       {
@@ -197,7 +197,7 @@ describe("processTransactions", () => {
     expect(swapRow.balances.EURC).toBe(0n);
   });
 
-  it("should process swap_fee transaction", () => {
+  it("process a swap_fee transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -244,10 +244,9 @@ describe("processTransactions", () => {
     expect(swapFeeRow.feeStroops).toBe(1000n); // we paid the fee
     expect(swapFeeRow.ops).toHaveLength(1);
     const swapFeeOp = swapFeeRow.ops[0];
-    if (swapFeeOp.kind !== "payment") {
-      fail("Operation kind is not payment");
+    if (swapFeeOp.kind !== "swap_fee") {
+      fail("Operation kind is not swap_fee");
     }
-    expect(swapFeeOp.direction).toBe("out");
     expect(swapFeeOp.amountStroops).toBe(101149n);
     expect(swapFeeOp.currency).toBe("XLM");
     expect(swapFeeOp.from).toBe(myWalletAddress);
@@ -258,7 +257,7 @@ describe("processTransactions", () => {
     expect(swapFeeRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle Blend deposit", () => {
+  it("process a Blend deposit", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("1000.0000000"),
       {
@@ -309,7 +308,7 @@ describe("processTransactions", () => {
     expect(blendDepositRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle Blend withdraw", () => {
+  it("process a Blend withdraw", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -360,7 +359,7 @@ describe("processTransactions", () => {
     expect(blendWithdrawRow.balances.EURC).toBe(0n);
   });
 
-  it("should handle multiple operations in a single transaction", () => {
+  it("process multiple operations in a single transaction", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("100.0000000"),
       {
@@ -405,10 +404,48 @@ describe("processTransactions", () => {
     expect(swapRow.feeStroops).toBe(123000n); // we paid the fee
     expect(swapRow.ops).toHaveLength(2);
     expect(swapRow.ops[0].kind).toBe("swap");
-    expect(swapRow.ops[1].kind).toBe("payment");
+    expect(swapRow.ops[1].kind).toBe("swap_fee");
 
     expect(swapRow.balances.XLM).toBe(99877000n);
     expect(swapRow.balances.USDC).toBe(409881616n);
     expect(swapRow.balances.EURC).toBe(0n);
+  });
+
+  it("process a sell offer transaction", () => {
+    const mockSellOffer = {
+      type: "manage_sell_offer",
+      source_account: myWalletAddress,
+      created_at: "2025-01-01T00:00:00Z",
+      selling_asset_type: "native",
+      buying_asset_type: "credit_alphanum4",
+      buying_asset_code: "EURC",
+      amount: "61612.8600000",
+      price: "0.2770000",
+    } as Horizon.ServerApi.OperationRecord;
+    const mockTxWithOps = [
+      buildCreateAccountTx("65000.0000000"),
+      {
+        tx: {
+          hash: "selloffer",
+          created_at: "2025-01-01T00:00:00Z",
+          fee_charged: "10",
+          fee_account: myWalletAddress,
+        } as Horizon.ServerApi.TransactionRecord,
+        ops: [mockSellOffer],
+      },
+    ];
+
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
+    expect(txRows).toHaveLength(2);
+
+    const sellOfferRow = txRows[1];
+    expect(sellOfferRow.transactionHash).toBe("selloffer");
+    expect(sellOfferRow.feeStroops).toBe(10n);
+    expect(sellOfferRow.ops).toHaveLength(1);
+    expect(sellOfferRow.ops[0].kind).toBe("sell_offer");
+
+    expect(sellOfferRow.balances.XLM).toBe(33871399990n);
+    expect(sellOfferRow.balances.EURC).toBe(170667624393n);
+    expect(sellOfferRow.balances.USDC).toBe(0n);
   });
 });
