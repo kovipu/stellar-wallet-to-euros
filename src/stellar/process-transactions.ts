@@ -1,4 +1,4 @@
-import { STROOPS_PER_UNIT, toCurrency, toStroops } from "../domain/units";
+import { toCurrency, toStroops } from "../domain/units";
 import { TxWithOps } from "./horizon";
 
 /** Process all transactions and calculate the running balance */
@@ -13,7 +13,7 @@ export function processTransactions(
     EURC: 0n,
   };
 
-  for (const { tx, ops } of transactions) {
+  for (const { tx, ops, trades } of transactions) {
     const rowOps: TxOpSummary[] = [];
 
     // Apply operation effects
@@ -140,13 +140,28 @@ export function processTransactions(
           op.buying_asset_type,
           op.buying_asset_code,
         );
-        const sourceAmountStroops = toStroops(op.amount);
 
-        // calculate credited amount
-        const priceStroops = toStroops(op.price);
-        const destinationAmount14 = priceStroops * sourceAmountStroops;
-        const destinationAmountStroops =
-          (destinationAmount14 + STROOPS_PER_UNIT / 2n) / STROOPS_PER_UNIT; // half up to scale 7
+        if (!trades || trades.length === 0) {
+          throw Error("No trades found for the sale offer");
+        }
+
+        const firstTrade = trades[0];
+        const isBase = firstTrade.base_account === walletAddress;
+
+        const [totalBaseAmount, totalCounterAmount] = trades.reduce(
+          ([a, b], trade) => [
+            (a += toStroops(trade.base_amount)),
+            (b += toStroops(trade.counter_amount)),
+          ],
+          [0n, 0n],
+        );
+
+        const sourceAmountStroops = isBase
+          ? totalBaseAmount
+          : totalCounterAmount;
+        const destinationAmountStroops = isBase
+          ? totalCounterAmount
+          : totalBaseAmount;
 
         rowOps.push({
           kind: "sell_offer",

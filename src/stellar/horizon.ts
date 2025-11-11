@@ -36,7 +36,6 @@ export async function fetchTransactionsWithOps(
     opsByTxHash.get(txHash)!.push(op);
   }
 
-  // Build TxWithOps array
   const txWithOps = txs.map(async (tx) => {
     const ops = opsByTxHash.get(tx.hash) || [];
 
@@ -104,6 +103,7 @@ async function fetchOperations(wallet: string): Promise<OperationRecord[]> {
   return ops;
 }
 
+/** Fetch all the trades for a specific offer */
 async function fetchTradesForOffer(offerId: string): Promise<TradeRecord[]> {
   console.log(`Fetching trades for offer ${offerId}...`);
 

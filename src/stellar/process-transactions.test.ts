@@ -422,6 +422,22 @@ describe("processTransactions", () => {
       amount: "61612.8600000",
       price: "0.2770000",
     } as Horizon.ServerApi.OperationRecord;
+
+    // Mock trades that sum to the expected amounts
+    const mockTrades: Horizon.ServerApi.TradeRecord.Orderbook[] = [
+      {
+        trade_type: "orderbook",
+        base_account: myWalletAddress, // Wallet is base account
+        base_offer_id: "12345",
+        base_amount: "61612.8600000", // XLM sold (base)
+        base_asset_type: "native",
+        counter_account: "OTHER_ACCOUNT",
+        counter_offer_id: "67890",
+        counter_amount: "17066.7624393", // EURC bought (counter)
+        counter_asset_type: "credit_alphanum4",
+      } as Horizon.ServerApi.TradeRecord.Orderbook,
+    ];
+
     const mockTxWithOps = [
       buildCreateAccountTx("65000.0000000"),
       {
@@ -432,6 +448,7 @@ describe("processTransactions", () => {
           fee_account: myWalletAddress,
         } as Horizon.ServerApi.TransactionRecord,
         ops: [mockSellOffer],
+        trades: mockTrades,
       },
     ];
 
