@@ -39,10 +39,16 @@ export async function fetchTransactionsWithOps(
   const txWithOps = txs.map(async (tx) => {
     const ops = opsByTxHash.get(tx.hash) || [];
 
-    const offerId = offerIdByTxHash[tx.hash];
-    const trades = offerId ? await fetchTradesForOffer(offerId) : undefined;
+    if (ops.some(op => op.type === "manage_sell_offer")) {
+      const offerId = offerIdByTxHash[tx.hash];
+      if (!offerId) {
+        throw Error(`No offerId found for tx: ${tx.hash}`);
+      }
+      const trades = await fetchTradesForOffer(offerId);
+      return { tx, ops, trades };
+    }
 
-    return { tx, ops, trades };
+    return { tx, ops };
   });
 
   return Promise.all(txWithOps);

@@ -406,12 +406,12 @@ describe("horizon.ts", () => {
         },
         {
           transaction_hash: "tx1",
-          type: "manage_sell_offer",
+          type: "set_options",
           source_account: testWallet,
         },
         {
           transaction_hash: "tx1",
-          type: "set_options",
+          type: "invoke_host_function",
           source_account: testWallet,
         },
       ] as Horizon.ServerApi.OperationRecord[];
@@ -494,6 +494,355 @@ describe("horizon.ts", () => {
 
       // Should have 3 operations total (2 from page1 + 1 from page2, dusting filtered)
       expect(result[0].ops).toHaveLength(3);
+    });
+  });
+
+  describe("Trade Fetching for manage_sell_offer", () => {
+    it("should fetch trades for transactions in offerIdByTxHash", async () => {
+      const txHashWithTrades =
+        "448e8f032d02fe7d018d5f09761b5bac03bcace1b2c55277d91bd20be160744b";
+      const offerId = "1799912560";
+
+      const mockTx = {
+        hash: txHashWithTrades,
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOp = {
+        transaction_hash: txHashWithTrades,
+        type: "manage_sell_offer",
+        source_account: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      const mockTrades = [
+        {
+          trade_type: "orderbook",
+          base_account: testWallet,
+          base_offer_id: offerId,
+          base_amount: "100.0000000",
+          counter_amount: "200.0000000",
+        },
+        {
+          trade_type: "orderbook",
+          base_account: testWallet,
+          base_offer_id: offerId,
+          base_amount: "50.0000000",
+          counter_amount: "100.0000000",
+        },
+      ] as Horizon.ServerApi.TradeRecord[];
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockOp],
+      });
+
+      // Mock trades for the offer
+      mockServer.call.mockResolvedValueOnce({
+        records: mockTrades,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].trades).toBeDefined();
+      expect(result[0].trades).toHaveLength(2);
+      expect(result[0].trades![0].base_amount).toBe("100.0000000");
+
+      // Verify fetchTradesForOffer was called with correct parameters
+      expect(mockServer.trades).toHaveBeenCalled();
+      expect(mockServer.forOffer).toHaveBeenCalledWith(offerId);
+    });
+
+    it("should not fetch trades for non-manage_sell_offer transactions", async () => {
+      const mockTx = {
+        hash: "some_random_tx_hash",
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOp = {
+        transaction_hash: "some_random_tx_hash",
+        type: "payment",
+        source_account: testWallet,
+        to: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockOp],
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].trades).toBeUndefined();
+
+      // Verify fetchTradesForOffer was NOT called
+      expect(mockServer.trades).not.toHaveBeenCalled();
+      expect(mockServer.forOffer).not.toHaveBeenCalled();
+    });
+
+    it("should throw error for manage_sell_offer tx NOT in offerIdByTxHash", async () => {
+      const txHash = "some_random_tx_hash";
+      const mockTx = {
+        hash: txHash,
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOp = {
+        transaction_hash: txHash,
+        type: "manage_sell_offer",
+        source_account: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockOp],
+      });
+
+      // Should throw error when manage_sell_offer tx is not in lookup table
+      await expect(fetchTransactionsWithOps(testWallet)).rejects.toThrow(
+        `No offerId found for tx: ${txHash}`,
+      );
+
+      // Verify fetchTradesForOffer was NOT called
+      expect(mockServer.trades).not.toHaveBeenCalled();
+      expect(mockServer.forOffer).not.toHaveBeenCalled();
+    });
+
+    it("should attach trades to correct transaction when multiple txs exist", async () => {
+      const txHashWithTrades =
+        "448e8f032d02fe7d018d5f09761b5bac03bcace1b2c55277d91bd20be160744b";
+      const txHashWithoutTrades = "other_tx_hash";
+      const offerId = "1799912560";
+
+      const mockTx1 = {
+        hash: txHashWithTrades,
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockTx2 = {
+        hash: txHashWithoutTrades,
+        created_at: "2025-01-02T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOp1 = {
+        transaction_hash: txHashWithTrades,
+        type: "manage_sell_offer",
+        source_account: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      const mockOp2 = {
+        transaction_hash: txHashWithoutTrades,
+        type: "payment",
+        source_account: testWallet,
+        to: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      const mockTrades = [
+        {
+          trade_type: "orderbook",
+          base_account: testWallet,
+          base_offer_id: offerId,
+          base_amount: "100.0000000",
+          counter_amount: "200.0000000",
+        },
+      ] as Horizon.ServerApi.TradeRecord[];
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx1, mockTx2],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockOp1, mockOp2],
+      });
+
+      // Mock trades
+      mockServer.call.mockResolvedValueOnce({
+        records: mockTrades,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      expect(result).toHaveLength(2);
+
+      // First transaction should have trades
+      const txWithTrades = result.find((r) => r.tx.hash === txHashWithTrades);
+      expect(txWithTrades?.trades).toBeDefined();
+      expect(txWithTrades?.trades).toHaveLength(1);
+
+      // Second transaction should NOT have trades
+      const txWithoutTrades = result.find(
+        (r) => r.tx.hash === txHashWithoutTrades,
+      );
+      expect(txWithoutTrades?.trades).toBeUndefined();
+    });
+
+    it("should fetch trades with pagination", async () => {
+      const txHashWithTrades =
+        "448e8f032d02fe7d018d5f09761b5bac03bcace1b2c55277d91bd20be160744b";
+      const offerId = "1799912560";
+
+      const mockTx = {
+        hash: txHashWithTrades,
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOp = {
+        transaction_hash: txHashWithTrades,
+        type: "manage_sell_offer",
+        source_account: testWallet,
+      } as Horizon.ServerApi.OperationRecord;
+
+      // Page 1: 200 trades
+      const mockTradesPage1 = Array.from({ length: 200 }, (_, i) => ({
+        trade_type: "orderbook",
+        base_account: testWallet,
+        base_offer_id: offerId,
+        base_amount: `${i}.0000000`,
+        counter_amount: `${i * 2}.0000000`,
+      })) as Horizon.ServerApi.TradeRecord[];
+
+      // Page 2: 100 trades
+      const mockTradesPage2 = Array.from({ length: 100 }, (_, i) => ({
+        trade_type: "orderbook",
+        base_account: testWallet,
+        base_offer_id: offerId,
+        base_amount: `${200 + i}.0000000`,
+        counter_amount: `${(200 + i) * 2}.0000000`,
+      })) as Horizon.ServerApi.TradeRecord[];
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockOp],
+      });
+
+      // Mock trades pagination
+      const tradesPage2 = {
+        records: mockTradesPage2,
+        next: vi.fn(),
+      };
+
+      const tradesPage1 = {
+        records: mockTradesPage1,
+        next: vi.fn().mockResolvedValue(tradesPage2),
+      };
+
+      mockServer.call.mockResolvedValueOnce(tradesPage1);
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].trades).toBeDefined();
+      expect(result[0].trades).toHaveLength(300); // 200 + 100
+      expect(tradesPage1.next).toHaveBeenCalledTimes(1);
+    });
+
+    it("should fetch trades for both transactions in offerIdByTxHash", async () => {
+      const txHash1 =
+        "448e8f032d02fe7d018d5f09761b5bac03bcace1b2c55277d91bd20be160744b";
+      const txHash2 =
+        "9e3acf4434995cbc6728a7e7e9d73b00e42841b8ddbeb787a9412d72dc6c7593";
+      const offerId1 = "1799912560";
+      const offerId2 = "1800705918";
+
+      const mockTx1 = {
+        hash: txHash1,
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockTx2 = {
+        hash: txHash2,
+        created_at: "2025-01-02T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockTrades1 = [
+        {
+          trade_type: "orderbook",
+          base_account: testWallet,
+          base_offer_id: offerId1,
+          base_amount: "100.0000000",
+          counter_amount: "200.0000000",
+        },
+      ] as Horizon.ServerApi.TradeRecord[];
+
+      const mockTrades2 = [
+        {
+          trade_type: "orderbook",
+          counter_account: testWallet,
+          counter_offer_id: offerId2,
+          base_amount: "50.0000000",
+          counter_amount: "150.0000000",
+        },
+      ] as Horizon.ServerApi.TradeRecord[];
+
+      const mockOps = [
+        {
+          transaction_hash: txHash1,
+          type: "manage_sell_offer",
+          source_account: testWallet,
+        },
+        {
+          transaction_hash: txHash2,
+          type: "manage_sell_offer",
+          source_account: testWallet,
+        },
+      ] as Horizon.ServerApi.OperationRecord[];
+
+      // Mock transactions
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx1, mockTx2],
+      });
+
+      // Mock operations
+      mockServer.call.mockResolvedValueOnce({
+        records: mockOps,
+      });
+
+      // Mock trades for first offer
+      mockServer.call.mockResolvedValueOnce({
+        records: mockTrades1,
+      });
+
+      // Mock trades for second offer
+      mockServer.call.mockResolvedValueOnce({
+        records: mockTrades2,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      expect(result).toHaveLength(2);
+
+      const tx1Result = result.find((r) => r.tx.hash === txHash1);
+      const tx2Result = result.find((r) => r.tx.hash === txHash2);
+
+      expect(tx1Result?.trades).toHaveLength(1);
+      expect(tx2Result?.trades).toHaveLength(1);
+
+      // Verify forOffer was called with both offer IDs
+      expect(mockServer.forOffer).toHaveBeenCalledWith(offerId1);
+      expect(mockServer.forOffer).toHaveBeenCalledWith(offerId2);
     });
   });
 });
