@@ -13,7 +13,7 @@ export function processTransactions(
     EURC: 0n,
   };
 
-  for (const { tx, ops } of transactions) {
+  for (const { tx, ops, trades } of transactions) {
     const rowOps: TxOpSummary[] = [];
 
     // Apply operation effects
@@ -131,6 +131,47 @@ export function processTransactions(
           amount: op.amount,
           currency: op.asset,
         });
+      } else if (op.type === "manage_sell_offer") {
+        const sourceCurrency = toCurrency(
+          op.selling_asset_type,
+          op.selling_asset_code,
+        );
+        const destinationCurrency = toCurrency(
+          op.buying_asset_type,
+          op.buying_asset_code,
+        );
+
+        if (!trades || trades.length === 0) {
+          throw Error("No trades found for the sale offer");
+        }
+
+        const firstTrade = trades[0];
+        const isBase = firstTrade.base_account === walletAddress;
+
+        const [totalBaseAmount, totalCounterAmount] = trades.reduce(
+          ([a, b], trade) => [
+            (a += toStroops(trade.base_amount)),
+            (b += toStroops(trade.counter_amount)),
+          ],
+          [0n, 0n],
+        );
+
+        const sourceAmountStroops = isBase
+          ? totalBaseAmount
+          : totalCounterAmount;
+        const destinationAmountStroops = isBase
+          ? totalCounterAmount
+          : totalBaseAmount;
+
+        rowOps.push({
+          kind: "sell_offer",
+          sourceCurrency,
+          sourceAmountStroops,
+          destinationCurrency,
+          destinationAmountStroops,
+        });
+        balances[sourceCurrency] -= sourceAmountStroops;
+        balances[destinationCurrency] += destinationAmountStroops;
       } else {
         throw new Error(`Unknown operation type: ${op.type}`);
       }
