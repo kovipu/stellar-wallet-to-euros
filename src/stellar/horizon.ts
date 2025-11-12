@@ -36,10 +36,14 @@ export async function fetchTransactionsWithOps(
     opsByTxHash.get(txHash)!.push(op);
   }
 
-  const txWithOps = txs.map(async (tx) => {
+  const txWithOpsPromises = txs.map(async (tx) => {
     const ops = opsByTxHash.get(tx.hash) || [];
 
-    if (ops.some(op => op.type === "manage_sell_offer")) {
+    if (ops.length === 0) {
+      throw Error(`Transaction ${tx.hash} has no operations for this wallet`);
+    }
+
+    if (ops.some((op) => op.type === "manage_sell_offer")) {
       const offerId = offerIdByTxHash[tx.hash];
       if (!offerId) {
         throw Error(`No offerId found for tx: ${tx.hash}`);
@@ -51,7 +55,14 @@ export async function fetchTransactionsWithOps(
     return { tx, ops };
   });
 
-  return Promise.all(txWithOps);
+  const txWithOps = await Promise.all(txWithOpsPromises);
+
+  // Filter out create_claimable_balance transactions.
+  // They're not worth anything to us, and would anyways cause another tx
+  // if claimed.
+  return txWithOps.filter(
+    ({ ops }) => !ops.every((op) => op.type === "create_claimable_balance"),
+  );
 }
 
 /** Fetch all txs for the account (paginated) */

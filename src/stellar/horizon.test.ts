@@ -43,7 +43,7 @@ describe("horizon.ts", () => {
     mockServer.order.mockReturnThis();
 
     // Mock console.log to avoid noise in test output
-    vi.spyOn(console, "log").mockImplementation(() => { });
+    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -105,9 +105,10 @@ describe("horizon.ts", () => {
       expect(result[1].ops).toContain(mockOp3);
     });
 
-    it("should handle transactions without operations", async () => {
+    it("should throw error for transactions without operations", async () => {
+      const txHash = "tx1";
       const mockTx = {
-        hash: "tx1",
+        hash: txHash,
         created_at: "2025-01-01T00:00:00Z",
       } as Horizon.ServerApi.TransactionRecord;
 
@@ -121,12 +122,10 @@ describe("horizon.ts", () => {
         records: [],
       });
 
-      const result = await fetchTransactionsWithOps(testWallet);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].tx.hash).toBe("tx1");
-      expect(result[0].ops).toHaveLength(0);
-      expect(result[0].trades).toBeUndefined();
+      // Should throw error when transaction has no operations
+      await expect(fetchTransactionsWithOps(testWallet)).rejects.toThrow(
+        `Transaction ${txHash} has no operations for this wallet`,
+      );
     });
   });
 
@@ -137,6 +136,13 @@ describe("horizon.ts", () => {
         created_at: "2025-01-01T00:00:00Z",
       })) as Horizon.ServerApi.TransactionRecord[];
 
+      const mockOps = Array.from({ length: 150 }, (_, i) => ({
+        transaction_hash: `tx${i}`,
+        type: "payment",
+        source_account: testWallet,
+        to: testWallet,
+      })) as Horizon.ServerApi.OperationRecord[];
+
       // Mock transactions page with < 200 records
       mockServer.call.mockResolvedValueOnce({
         records: mockTxs,
@@ -145,7 +151,7 @@ describe("horizon.ts", () => {
 
       // Mock operations page
       mockServer.call.mockResolvedValueOnce({
-        records: [],
+        records: mockOps,
       });
 
       const result = await fetchTransactionsWithOps(testWallet);
@@ -166,28 +172,44 @@ describe("horizon.ts", () => {
         created_at: "2025-01-01T00:00:00Z",
       })) as Horizon.ServerApi.TransactionRecord[];
 
-      const mockPage2 = {
+      // Create one operation per transaction (< 200 to avoid ops pagination)
+      const mockOps = Array.from({ length: 300 }, (_, i) => ({
+        transaction_hash: `tx${i}`,
+        type: "payment",
+        source_account: testWallet,
+        to: testWallet,
+      })) as Horizon.ServerApi.OperationRecord[];
+
+      const mockTxPage2 = {
         records: mockTxsPage2,
         next: vi.fn(),
       };
 
-      const mockPage1 = {
+      const mockTxPage1 = {
         records: mockTxsPage1,
-        next: vi.fn().mockResolvedValue(mockPage2),
+        next: vi.fn().mockResolvedValue(mockTxPage2),
       };
 
       // Mock transactions pagination
-      mockServer.call.mockResolvedValueOnce(mockPage1);
+      mockServer.call.mockResolvedValueOnce(mockTxPage1);
 
-      // Mock operations page
-      mockServer.call.mockResolvedValueOnce({
-        records: [],
-      });
+      // Mock operations - split into pages to avoid triggering pagination error
+      const mockOpsPage2 = {
+        records: mockOps.slice(200),
+        next: vi.fn(),
+      };
+
+      const mockOpsPage1 = {
+        records: mockOps.slice(0, 200),
+        next: vi.fn().mockResolvedValue(mockOpsPage2),
+      };
+
+      mockServer.call.mockResolvedValueOnce(mockOpsPage1);
 
       const result = await fetchTransactionsWithOps(testWallet);
 
       expect(result).toHaveLength(300);
-      expect(mockPage1.next).toHaveBeenCalledTimes(1);
+      expect(mockTxPage1.next).toHaveBeenCalledTimes(1);
     });
 
     it("operations – should fetch single page when results < 200", async () => {
@@ -309,14 +331,15 @@ describe("horizon.ts", () => {
       expect(result[0].ops[0]).toBe(mockOp);
     });
 
-    it("should exclude payment operations to/from other wallets", async () => {
+    it("should throw error for transactions with only dusting attacks", async () => {
+      const txHash = "tx1";
       const mockTx = {
-        hash: "tx1",
+        hash: txHash,
         created_at: "2025-01-01T00:00:00Z",
       } as Horizon.ServerApi.TransactionRecord;
 
       const mockDustingOp = {
-        transaction_hash: "tx1",
+        transaction_hash: txHash,
         type: "payment",
         source_account: "OTHER_WALLET_1",
         to: "OTHER_WALLET_2",
@@ -330,9 +353,10 @@ describe("horizon.ts", () => {
         records: [mockDustingOp],
       });
 
-      const result = await fetchTransactionsWithOps(testWallet);
-
-      expect(result[0].ops).toHaveLength(0); // Filtered out
+      // Should throw error when all operations are filtered out (dusting attacks)
+      await expect(fetchTransactionsWithOps(testWallet)).rejects.toThrow(
+        `Transaction ${txHash} has no operations for this wallet`,
+      );
     });
 
     it("should include create_claimable_balance where wallet is a claimant", async () => {
@@ -341,7 +365,7 @@ describe("horizon.ts", () => {
         created_at: "2025-01-01T00:00:00Z",
       } as Horizon.ServerApi.TransactionRecord;
 
-      const mockOp = {
+      const mockClaimableOp = {
         transaction_hash: "tx1",
         type: "create_claimable_balance",
         claimants: [
@@ -350,28 +374,39 @@ describe("horizon.ts", () => {
         ],
       } as Horizon.ServerApi.OperationRecord;
 
+      // Add another operation so the transaction isn't filtered out
+      const mockPaymentOp = {
+        transaction_hash: "tx1",
+        type: "payment",
+        source_account: testWallet,
+        to: "OTHER",
+      } as Horizon.ServerApi.OperationRecord;
+
       mockServer.call.mockResolvedValueOnce({
         records: [mockTx],
       });
 
       mockServer.call.mockResolvedValueOnce({
-        records: [mockOp],
+        records: [mockClaimableOp, mockPaymentOp],
       });
 
       const result = await fetchTransactionsWithOps(testWallet);
 
-      expect(result[0].ops).toHaveLength(1);
-      expect(result[0].ops[0]).toBe(mockOp);
+      expect(result).toHaveLength(1);
+      expect(result[0].ops).toHaveLength(2);
+      expect(result[0].ops).toContain(mockClaimableOp);
+      expect(result[0].ops).toContain(mockPaymentOp);
     });
 
-    it("should exclude create_claimable_balance where wallet is NOT a claimant", async () => {
+    it("should throw error when create_claimable_balance excludes wallet", async () => {
+      const txHash = "tx1";
       const mockTx = {
-        hash: "tx1",
+        hash: txHash,
         created_at: "2025-01-01T00:00:00Z",
       } as Horizon.ServerApi.TransactionRecord;
 
       const mockOp = {
-        transaction_hash: "tx1",
+        transaction_hash: txHash,
         type: "create_claimable_balance",
         claimants: [
           { destination: "OTHER_WALLET_1" },
@@ -387,9 +422,10 @@ describe("horizon.ts", () => {
         records: [mockOp],
       });
 
-      const result = await fetchTransactionsWithOps(testWallet);
-
-      expect(result[0].ops).toHaveLength(0); // Filtered out
+      // Operation is filtered out during fetchOperations, transaction has no ops
+      await expect(fetchTransactionsWithOps(testWallet)).rejects.toThrow(
+        `Transaction ${txHash} has no operations for this wallet`,
+      );
     });
 
     it("should include all non-payment, non-claimable operations", async () => {
@@ -494,6 +530,126 @@ describe("horizon.ts", () => {
 
       // Should have 3 operations total (2 from page1 + 1 from page2, dusting filtered)
       expect(result[0].ops).toHaveLength(3);
+    });
+  });
+
+  describe("Transaction Filtering - create_claimable_balance", () => {
+    it("should filter out transactions with ONLY create_claimable_balance operations", async () => {
+      const mockTx = {
+        hash: "tx_spam",
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOps = [
+        {
+          transaction_hash: "tx_spam",
+          type: "create_claimable_balance",
+          claimants: [{ destination: testWallet }],
+        },
+        {
+          transaction_hash: "tx_spam",
+          type: "create_claimable_balance",
+          claimants: [{ destination: testWallet }],
+        },
+      ] as Horizon.ServerApi.OperationRecord[];
+
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      mockServer.call.mockResolvedValueOnce({
+        records: mockOps,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      // Transaction should be filtered out completely
+      expect(result).toHaveLength(0);
+    });
+
+    it("should keep transactions with create_claimable_balance AND other operations", async () => {
+      const mockTx = {
+        hash: "tx_mixed",
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOps = [
+        {
+          transaction_hash: "tx_mixed",
+          type: "create_claimable_balance",
+          claimants: [{ destination: testWallet }],
+        },
+        {
+          transaction_hash: "tx_mixed",
+          type: "payment",
+          source_account: testWallet,
+          to: "OTHER",
+        },
+      ] as Horizon.ServerApi.OperationRecord[];
+
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx],
+      });
+
+      mockServer.call.mockResolvedValueOnce({
+        records: mockOps,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      // Transaction should be kept
+      expect(result).toHaveLength(1);
+      expect(result[0].ops).toHaveLength(2);
+    });
+
+    it("should filter out multiple create_claimable_balance-only transactions", async () => {
+      const mockTx1 = {
+        hash: "tx_spam1",
+        created_at: "2025-01-01T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockTx2 = {
+        hash: "tx_good",
+        created_at: "2025-01-02T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockTx3 = {
+        hash: "tx_spam2",
+        created_at: "2025-01-03T00:00:00Z",
+      } as Horizon.ServerApi.TransactionRecord;
+
+      const mockOps = [
+        {
+          transaction_hash: "tx_spam1",
+          type: "create_claimable_balance",
+          claimants: [{ destination: testWallet }],
+        },
+        {
+          transaction_hash: "tx_good",
+          type: "payment",
+          source_account: testWallet,
+          to: "OTHER",
+        },
+        {
+          transaction_hash: "tx_spam2",
+          type: "create_claimable_balance",
+          claimants: [{ destination: testWallet }],
+        },
+      ] as Horizon.ServerApi.OperationRecord[];
+
+      mockServer.call.mockResolvedValueOnce({
+        records: [mockTx1, mockTx2, mockTx3],
+      });
+
+      mockServer.call.mockResolvedValueOnce({
+        records: mockOps,
+      });
+
+      const result = await fetchTransactionsWithOps(testWallet);
+
+      // Only tx_good should remain
+      expect(result).toHaveLength(1);
+      expect(result[0].tx.hash).toBe("tx_good");
     });
   });
 
