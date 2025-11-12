@@ -50,7 +50,7 @@ export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
     "Luovutushinta (€)": formatCents(sum.proceeds),
     "Hankintameno (€)": formatCents(sum.cost),
     "Voitto/Tappio (€)": formatCents(sum.pl),
-  });
+  } as any);
 
   // Use semicolon so Excel (EU locale) parses numbers with comma decimals nicely
   return stringify(rows, {
