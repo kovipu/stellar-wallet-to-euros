@@ -349,9 +349,7 @@ describe("fifo.ts", () => {
       expect(fill.dispPriceMicro).toBe(600_000n);
 
       // Remaining batch
-      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(
-        70_0000000n,
-      );
+      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(70_0000000n);
     });
 
     it("should handle partial disposal leaving remaining quantity", () => {
@@ -625,16 +623,10 @@ describe("fifo.ts", () => {
       expect(result.fills[0].acqPriceMicro).toBe(400_000n); // First batch price
 
       // First batch partially consumed
-      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(
-        20_0000000n,
-      );
+      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(20_0000000n);
       // Other batches untouched
-      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(
-        50_0000000n,
-      );
-      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(
-        50_0000000n,
-      );
+      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(50_0000000n);
+      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(50_0000000n);
     });
 
     it("should span multiple batches when disposal exceeds first batch", () => {
@@ -703,12 +695,8 @@ describe("fifo.ts", () => {
 
       // Check remaining quantities
       expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(0n);
-      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(
-        10_0000000n,
-      );
-      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(
-        50_0000000n,
-      );
+      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(10_0000000n);
+      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(50_0000000n);
     });
 
     it("should fully deplete middle batch before moving to next", () => {
@@ -792,9 +780,7 @@ describe("fifo.ts", () => {
       // Final state
       expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(0n);
       expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(0n);
-      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(
-        15_0000000n,
-      );
+      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(15_0000000n);
     });
 
     it("should skip empty batches and find next available", () => {
@@ -1780,9 +1766,7 @@ describe("fifo.ts", () => {
       // Check remaining inventory
       expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(0n);
       expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(0n);
-      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(
-        10_0000000n,
-      );
+      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(10_0000000n);
     });
 
     it("should handle sell_offer identically to swap", () => {
@@ -1924,9 +1908,7 @@ describe("fifo.ts", () => {
 
       // Started with 100, sent 30, sent 20, paid 0.5 fee
       // Remaining: 100 - 30 - 20 - 0.5 = 49.5 XLM
-      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(
-        49_5000000n,
-      );
+      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(49_5000000n);
     });
 
     it("should include zero-remaining batches in inventory", () => {
@@ -1973,9 +1955,7 @@ describe("fifo.ts", () => {
       // Both batches should still be in inventory
       expect(result.endingBatches.XLM).toHaveLength(2);
       expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(0n);
-      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(
-        50_0000000n,
-      );
+      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(50_0000000n);
     });
 
     it("should always have EURC par batch present", () => {
@@ -2100,17 +2080,11 @@ describe("fifo.ts", () => {
 
       expect(result.endingBatches.XLM).toHaveLength(3);
       // Batch 1: 100 - 60 = 40 remaining
-      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(
-        40_0000000n,
-      );
+      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(40_0000000n);
       // Batch 2: untouched
-      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(
-        50_0000000n,
-      );
+      expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(50_0000000n);
       // Batch 3: untouched
-      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(
-        75_0000000n,
-      );
+      expect(result.endingBatches.XLM[2].qtyRemainingStroops).toBe(75_0000000n);
     });
   });
 });

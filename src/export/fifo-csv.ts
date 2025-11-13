@@ -3,29 +3,101 @@ import { AcqKind, Batch, DispKind, Fill } from "../report/fifo";
 import { formatCents, formatPriceMicro, toDecimal } from "../domain/units";
 import { stringify } from "csv-stringify/sync";
 
-/* ---------------------------- Fills CSV --------------------------- */
+/* -------------------------- Events CSV ---------------------------- */
 
-export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
-  const rows = fills.map((f) => ({
-    "Luovutushetki (UTC)": f.disposedAt.toISOString(),
-    "Luovutuksen tyyppi": dispKindFi(f.dispKind),
-    Valuutta: f.currency,
-    Määrä: toDecimal(f.amountStroops),
-    "Erä ID": f.batchId,
-    "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
-    "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
-    "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
-    "Luovutushinta (€)": formatCents(f.proceedsCents),
-    "Hankintameno (€)": formatCents(f.costCents),
-    "Voitto/Tappio (€)": formatCents(f.gainLossCents),
-    "Transaction Hash": f.txHash,
-  }));
+type Event =
+  | {
+      type: "acquisition";
+      date: Date;
+      batch: Batch;
+    }
+  | {
+      type: "disposal";
+      date: Date;
+      fill: Fill;
+    };
+
+export function buildEventsCsv(
+  batches: Record<Currency, Batch[]>,
+  fills: ReadonlyArray<Fill>,
+): string {
+  const events: Event[] = [];
+
+  // Add all acquisitions (batches)
+  for (const [_currency, batchList] of Object.entries(batches)) {
+    for (const batch of batchList) {
+      // Skip EURC par batch if it was never used
+      if (batch.batchId === "EURC#PAR" && batch.qtyInitialStroops === 0n) {
+        continue;
+      }
+      events.push({
+        type: "acquisition",
+        date: batch.acquiredAt,
+        batch,
+      });
+    }
+  }
+
+  // Add all disposals (fills)
+  for (const fill of fills) {
+    events.push({
+      type: "disposal",
+      date: fill.disposedAt,
+      fill,
+    });
+  }
+
+  // Sort chronologically
+  events.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const rows = events.map((e) => {
+    if (e.type === "acquisition") {
+      const b = e.batch;
+      const totalCostCents =
+        (b.qtyInitialStroops * b.priceMicroAtAcq + 50_000_000_000n) /
+        100_000_000_000n;
+
+      return {
+        Tyyppi: "Hankinta",
+        "Luovutushetki (UTC)": "", // No disposal yet
+        Toiminto: acqKindFi(b.acqKind),
+        Valuutta: b.currency,
+        Määrä: toDecimal(b.qtyInitialStroops),
+        "Erä ID": b.batchId,
+        "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
+        "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
+        "Luovutushinta (€/kpl)": "", // No disposal price yet
+        "Luovutushinta (€)": "", // No proceeds yet
+        "Hankintameno (€)": formatCents(totalCostCents),
+        "Voitto/Tappio (€)": "", // No gain/loss yet
+        "Transaction Hash": b.acqTxHash,
+      };
+    } else {
+      const f = e.fill;
+      return {
+        Tyyppi: "Luovutus",
+        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
+        Toiminto: dispKindFi(f.dispKind),
+        Valuutta: f.currency,
+        Määrä: toDecimal(f.amountStroops),
+        "Erä ID": f.batchId,
+        "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
+        "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
+        "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
+        "Luovutushinta (€)": formatCents(f.proceedsCents),
+        "Hankintameno (€)": formatCents(f.costCents),
+        "Voitto/Tappio (€)": formatCents(f.gainLossCents),
+        "Transaction Hash": f.txHash,
+      };
+    }
+  });
 
   return stringify(rows, {
     header: true,
     columns: [
+      "Tyyppi",
       "Luovutushetki (UTC)",
-      "Luovutuksen tyyppi",
+      "Toiminto",
       "Valuutta",
       "Määrä",
       "Erä ID",
@@ -59,12 +131,18 @@ export const dispKindFi = (k: DispKind): string =>
     network_fee: "Verkkopalkkio",
   })[k];
 
-export function writeFillsCsvFile(
+export function writeEventsCsvFile(
+  batches: Record<Currency, Batch[]>,
   fills: ReadonlyArray<Fill>,
-  path = "fifo_fills.csv",
+  path = "events.csv",
 ) {
-  writeFileSync(path, buildFillsCsv(fills), "utf8");
-  console.log(`Wrote ${path} (${fills.length} fills)`);
+  const csv = buildEventsCsv(batches, fills);
+  writeFileSync(path, csv, "utf8");
+  const totalEvents =
+    Object.values(batches)
+      .flat()
+      .filter((b) => b.qtyInitialStroops > 0n).length + fills.length;
+  console.log(`Wrote ${path} (${totalEvents} events)`);
 }
 
 /* ------------------------- Inventory CSV -------------------------- */
