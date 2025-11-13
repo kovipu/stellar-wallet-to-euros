@@ -6,9 +6,7 @@ import { stringify } from "csv-stringify/sync";
 /* ---------------------------- Fills CSV --------------------------- */
 
 export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
-  const visibleFills = fills.filter((f) => !isDustFill(f));
-
-  const rows = visibleFills.map((f) => ({
+  const rows = fills.map((f) => ({
     "Luovutushetki (UTC)": f.disposedAt.toISOString(),
     "Luovutuksen tyyppi": dispKindFi(f.dispKind),
     Valuutta: f.currency,
@@ -23,36 +21,6 @@ export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
     "Transaction Hash": f.txHash,
   }));
 
-  // append summary of hidden rows
-  const hidden = fills.filter((f) => isDustFill(f));
-  const sum = hidden.reduce(
-    (acc, f) => {
-      acc.proceeds += f.proceedsCents;
-      acc.cost += f.costCents;
-      acc.pl += f.gainLossCents;
-      return acc;
-    },
-    { proceeds: 0n, cost: 0n, pl: 0n },
-  );
-
-  // Blank separator line
-  rows.push({ "Luovutushetki (UTC)": "", "Tapahtuman hash": "" } as any);
-
-  rows.push({
-    "Luovutushetki (UTC)": "Yhteenveto: piilotettuja rivejä (arvo < 0,01 €",
-    "Luovutuksen tyyppi": `${hidden.length} kpl`,
-    Valuutta: "",
-    Määrä: "",
-    "Erä-ID": "",
-    "Hankintahetki (UTC)": "",
-    "Hankintahinta (€/kpl)": "",
-    "Luovutushinta (€/kpl)": "",
-    "Luovutushinta (€)": formatCents(sum.proceeds),
-    "Hankintameno (€)": formatCents(sum.cost),
-    "Voitto/Tappio (€)": formatCents(sum.pl),
-  } as any);
-
-  // Use semicolon so Excel (EU locale) parses numbers with comma decimals nicely
   return stringify(rows, {
     header: true,
     columns: [
@@ -71,16 +39,6 @@ export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
     ],
   });
 }
-
-const DUST_THRESHOLD_CENTS = 1n; // < 0.01€
-
-// Hide only if everything rounds to 0 cents.
-const isDustFill = (f: Fill) =>
-  abs(f.proceedsCents) < DUST_THRESHOLD_CENTS &&
-  abs(f.costCents) < DUST_THRESHOLD_CENTS &&
-  abs(f.gainLossCents) < DUST_THRESHOLD_CENTS;
-
-const abs = (x: bigint) => (x < 0n ? -x : x);
 
 // Finnish labels
 export const acqKindFi = (k: AcqKind): string =>
