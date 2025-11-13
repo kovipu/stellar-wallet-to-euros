@@ -47,8 +47,26 @@ export function buildEventsCsv(
     });
   }
 
-  // Sort chronologically
-  events.sort((a, b) => a.date.getTime() - b.date.getTime());
+  // Sort by: 1) currency, 2) type (acquisition before disposal), 3) timestamp
+  events.sort((a, b) => {
+    const currencyA =
+      a.type === "acquisition" ? a.batch.currency : a.fill.currency;
+    const currencyB =
+      b.type === "acquisition" ? b.batch.currency : b.fill.currency;
+
+    // First sort by currency
+    if (currencyA !== currencyB) {
+      return currencyA.localeCompare(currencyB);
+    }
+
+    // Then by type (acquisitions before disposals)
+    if (a.type !== b.type) {
+      return a.type === "acquisition" ? -1 : 1;
+    }
+
+    // Finally by timestamp
+    return a.date.getTime() - b.date.getTime();
+  });
 
   const rows = events.map((e) => {
     if (e.type === "acquisition") {
