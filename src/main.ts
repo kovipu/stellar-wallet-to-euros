@@ -4,7 +4,10 @@ import { writeTransactionsCsvFile } from "./export/transactions-csv";
 import { loadPriceCache, saveCache } from "./pricing/price-cache";
 import { buildPriceBook } from "./pricing/price-service";
 import { computeFifoFills } from "./report/fifo";
-import { writeFillsCsvFile, writeInventoryCsvFile } from "./export/fifo-csv";
+import {
+  writeInventoryCsvFile,
+  writeEventsCsvFile,
+} from "./export/fifo-csv";
 
 // Get transactions and calculate their taxes with first in first out
 async function main() {
@@ -23,15 +26,15 @@ async function main() {
     const allTransactions =
       await fetchTransactionsWithOps(walletAddress);
 
-    const txRows = await processTransactions(allTransactions, walletAddress);
+    const txRows = processTransactions(allTransactions, walletAddress);
 
     const priceBook = await buildPriceBook(txRows, cache);
 
-    const { fills, endingBatches } = computeFifoFills(txRows, priceBook)
+    const { fills, endingBatches } = computeFifoFills(txRows, priceBook);
 
-    writeTransactionsCsvFile(txRows, priceBook, fills)
-    writeFillsCsvFile(fills)
-    writeInventoryCsvFile(endingBatches)
+    writeTransactionsCsvFile(txRows, priceBook, fills);
+    writeInventoryCsvFile(endingBatches);
+    writeEventsCsvFile(endingBatches, fills);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   } finally {

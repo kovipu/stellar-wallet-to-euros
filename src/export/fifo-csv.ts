@@ -3,61 +3,119 @@ import { AcqKind, Batch, DispKind, Fill } from "../report/fifo";
 import { formatCents, formatPriceMicro, toDecimal } from "../domain/units";
 import { stringify } from "csv-stringify/sync";
 
-/* ---------------------------- Fills CSV --------------------------- */
+/* -------------------------- Events CSV ---------------------------- */
 
-export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
-  const visibleFills = fills.filter((f) => !isDustFill(f));
+type Event =
+  | {
+      type: "acquisition";
+      date: Date;
+      batch: Batch;
+    }
+  | {
+      type: "disposal";
+      date: Date;
+      fill: Fill;
+    };
 
-  const rows = visibleFills.map((f) => ({
-    "Luovutushetki (UTC)": f.disposedAt.toISOString(),
-    "Luovutuksen tyyppi": dispKindFi(f.dispKind),
-    Valuutta: f.currency,
-    Määrä: toDecimal(f.amountStroops),
-    "Erä ID": f.batchId,
-    "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
-    "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
-    "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
-    "Luovutushinta (€)": formatCents(f.proceedsCents),
-    "Hankintameno (€)": formatCents(f.costCents),
-    "Voitto/Tappio (€)": formatCents(f.gainLossCents),
-    "Transaction Hash": f.txHash,
-  }));
+export function buildEventsCsv(
+  batches: Record<Currency, Batch[]>,
+  fills: ReadonlyArray<Fill>,
+): string {
+  const events: Event[] = [];
 
-  // append summary of hidden rows
-  const hidden = fills.filter((f) => isDustFill(f));
-  const sum = hidden.reduce(
-    (acc, f) => {
-      acc.proceeds += f.proceedsCents;
-      acc.cost += f.costCents;
-      acc.pl += f.gainLossCents;
-      return acc;
-    },
-    { proceeds: 0n, cost: 0n, pl: 0n },
-  );
+  // Add all acquisitions (batches)
+  for (const [_currency, batchList] of Object.entries(batches)) {
+    for (const batch of batchList) {
+      // Skip EURC par batch if it was never used
+      if (batch.batchId === "EURC#PAR" && batch.qtyInitialStroops === 0n) {
+        continue;
+      }
+      events.push({
+        type: "acquisition",
+        date: batch.acquiredAt,
+        batch,
+      });
+    }
+  }
 
-  // Blank separator line
-  rows.push({ "Luovutushetki (UTC)": "", "Tapahtuman hash": "" } as any);
+  // Add all disposals (fills)
+  for (const fill of fills) {
+    events.push({
+      type: "disposal",
+      date: fill.disposedAt,
+      fill,
+    });
+  }
 
-  rows.push({
-    "Luovutushetki (UTC)": "Yhteenveto: piilotettuja rivejä (arvo < 0,01 €",
-    "Luovutuksen tyyppi": `${hidden.length} kpl`,
-    Valuutta: "",
-    Määrä: "",
-    "Erä-ID": "",
-    "Hankintahetki (UTC)": "",
-    "Hankintahinta (€/kpl)": "",
-    "Luovutushinta (€/kpl)": "",
-    "Luovutushinta (€)": formatCents(sum.proceeds),
-    "Hankintameno (€)": formatCents(sum.cost),
-    "Voitto/Tappio (€)": formatCents(sum.pl),
+  // Sort by: 1) currency, 2) type (acquisition before disposal), 3) timestamp
+  events.sort((a, b) => {
+    const currencyA =
+      a.type === "acquisition" ? a.batch.currency : a.fill.currency;
+    const currencyB =
+      b.type === "acquisition" ? b.batch.currency : b.fill.currency;
+
+    // First sort by currency
+    if (currencyA !== currencyB) {
+      return currencyA.localeCompare(currencyB);
+    }
+
+    // Then by type (acquisitions before disposals)
+    if (a.type !== b.type) {
+      return a.type === "acquisition" ? -1 : 1;
+    }
+
+    // Finally by timestamp
+    return a.date.getTime() - b.date.getTime();
   });
 
-  // Use semicolon so Excel (EU locale) parses numbers with comma decimals nicely
+  const rows = events.map((e) => {
+    if (e.type === "acquisition") {
+      const b = e.batch;
+      const totalCostCents =
+        (b.qtyInitialStroops * b.priceMicroAtAcq + 50_000_000_000n) /
+        100_000_000_000n;
+
+      return {
+        Tyyppi: "Hankinta",
+        "Luovutushetki (UTC)": "", // No disposal yet
+        Toiminto: acqKindFi(b.acqKind),
+        Valuutta: b.currency,
+        Määrä: toDecimal(b.qtyInitialStroops),
+        "Erä ID": b.batchId,
+        "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
+        "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
+        "Luovutushinta (€/kpl)": "", // No disposal price yet
+        "Luovutushinta (€)": "", // No proceeds yet
+        "Hankintameno (€)": formatCents(totalCostCents),
+        "Voitto/Tappio (€)": "", // No gain/loss yet
+        "Transaction Hash": b.acqTxHash,
+      };
+    } else {
+      const f = e.fill;
+      return {
+        Tyyppi: "Luovutus",
+        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
+        Toiminto: dispKindFi(f.dispKind),
+        Valuutta: f.currency,
+        Määrä: toDecimal(f.amountStroops),
+        "Erä ID": f.batchId,
+        "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
+        "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
+        "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
+        "Luovutushinta (€)": formatCents(f.proceedsCents),
+        "Hankintameno (€)": formatCents(f.costCents),
+        "Voitto/Tappio (€)": formatCents(f.gainLossCents),
+        "Transaction Hash": f.txHash,
+      };
+    }
+  });
+
   return stringify(rows, {
     header: true,
     columns: [
+      "Tyyppi",
       "Luovutushetki (UTC)",
-      "Luovutuksen tyyppi",
+      "Toiminto",
       "Valuutta",
       "Määrä",
       "Erä ID",
@@ -71,16 +129,6 @@ export function buildFillsCsv(fills: ReadonlyArray<Fill>): string {
     ],
   });
 }
-
-const DUST_THRESHOLD_CENTS = 1n; // < 0.01€
-
-// Hide only if everything rounds to 0 cents.
-const isDustFill = (f: Fill) =>
-  abs(f.proceedsCents) < DUST_THRESHOLD_CENTS &&
-  abs(f.costCents) < DUST_THRESHOLD_CENTS &&
-  abs(f.gainLossCents) < DUST_THRESHOLD_CENTS;
-
-const abs = (x: bigint) => (x < 0n ? -x : x);
 
 // Finnish labels
 export const acqKindFi = (k: AcqKind): string =>
@@ -101,12 +149,18 @@ export const dispKindFi = (k: DispKind): string =>
     network_fee: "Verkkopalkkio",
   })[k];
 
-export function writeFillsCsvFile(
+export function writeEventsCsvFile(
+  batches: Record<Currency, Batch[]>,
   fills: ReadonlyArray<Fill>,
-  path = "fifo_fills.csv",
+  path = "events.csv",
 ) {
-  writeFileSync(path, buildFillsCsv(fills), "utf8");
-  console.log(`Wrote ${path} (${fills.length} fills)`);
+  const csv = buildEventsCsv(batches, fills);
+  writeFileSync(path, csv, "utf8");
+  const totalEvents =
+    Object.values(batches)
+      .flat()
+      .filter((b) => b.qtyInitialStroops > 0n).length + fills.length;
+  console.log(`Wrote ${path} (${totalEvents} events)`);
 }
 
 /* ------------------------- Inventory CSV -------------------------- */
