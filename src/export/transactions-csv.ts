@@ -22,12 +22,16 @@ export const buildTransactionsCsv = (
       pl: 0n,
       batchIds: new Set<string>(),
       dispKinds: new Set<DispKind>(),
+      disposalsByCurrency: new Map<Currency, bigint>(),
     };
 
     return {
       "Päivämäärä (UTC)": tx.date.toISOString(),
       "Luovutuksen tyyppi": Array.from(agg.dispKinds)
         .map(dispKindFi)
+        .join(", "),
+      "Luovutetut määrät": Array.from(agg.disposalsByCurrency.entries())
+        .map(([currency, amount]) => `${currency}: ${toDecimal(amount)}`)
         .join(", "),
       "Luovutuserien ID:t": Array.from(agg.batchIds).join(", "),
       Tyyppi: tx.ops.map((op) => op.kind).join(", "),
@@ -59,6 +63,7 @@ export const buildTransactionsCsv = (
     columns: [
       "Päivämäärä (UTC)",
       "Luovutuksen tyyppi",
+      "Luovutetut määrät",
       "Luovutuserien ID:t",
       "Tyyppi",
       "Arvo sisään (€)",
@@ -99,6 +104,7 @@ type FillByTx = Map<
     pl: bigint;
     batchIds: Set<string>;
     dispKinds: Set<DispKind>;
+    disposalsByCurrency: Map<Currency, bigint>;
   }
 >;
 
@@ -111,15 +117,19 @@ function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
       pl: 0n,
       batchIds: new Set<string>(),
       dispKinds: new Set<DispKind>(),
+      disposalsByCurrency: new Map<Currency, bigint>(),
     };
     cur.batchIds.add(f.batchId);
     cur.dispKinds.add(f.dispKind);
+    const currentAmount = cur.disposalsByCurrency.get(f.currency) ?? 0n;
+    cur.disposalsByCurrency.set(f.currency, currentAmount + f.amountStroops);
     m.set(f.txHash, {
       proceeds: cur.proceeds + f.proceedsCents,
       cost: cur.cost + f.costCents,
       pl: cur.pl + f.gainLossCents,
       batchIds: cur.batchIds,
       dispKinds: cur.dispKinds,
+      disposalsByCurrency: cur.disposalsByCurrency,
     });
   }
   return m;
