@@ -1,6 +1,8 @@
 import { stringify } from "csv-stringify/sync";
-import { formatCents, toDecimal } from "../domain/units";
+import { formatCents, toDecimal, formatPriceMicro } from "../domain/units";
 import { PriceBook } from "../pricing/price-service";
+import { dateKeyUTC } from "../pricing/date-keys";
+import { getCachedPrice } from "../pricing/price-cache";
 import { valueTxInEUR } from "../report/valuation";
 import { writeFileSync } from "fs";
 import { DispKind, Fill } from "../report/fifo";
@@ -23,7 +25,18 @@ export const buildTransactionsCsv = (
       batchIds: new Set<string>(),
       dispKinds: new Set<DispKind>(),
       disposalsByCurrency: new Map<Currency, bigint>(),
+      disposalsByKindCurrency: new Map<string, { dispKind: DispKind; currency: Currency }>(),
     };
+
+    // Get exchange rates per disposal type and currency from priceBook
+    const exchangeRates = Array.from(agg.disposalsByKindCurrency.values())
+      .map((disposal) => {
+        const priceEntry = getCachedPrice(priceBook, disposal.currency, dateKeyUTC(tx.date));
+        if (!priceEntry) return null;
+        return `${dispKindFi(disposal.dispKind)}: ${disposal.currency} @ ${formatPriceMicro(priceEntry.priceMicroEur)} €/yksikkö`;
+      })
+      .filter((x) => x !== null)
+      .join(", ");
 
     return {
       "Päivämäärä (UTC)": tx.date.toISOString(),
@@ -33,6 +46,7 @@ export const buildTransactionsCsv = (
       "Luovutetut määrät": Array.from(agg.disposalsByCurrency.entries())
         .map(([currency, amount]) => `${currency}: ${toDecimal(amount)}`)
         .join(", "),
+      Valuuttakurssit: exchangeRates,
       "Luovutuserien ID:t": Array.from(agg.batchIds).join(", "),
       Tyyppi: tx.ops.map((op) => op.kind).join(", "),
       "Arvo sisään (€)": formatCents(flow.inCents),
@@ -64,6 +78,7 @@ export const buildTransactionsCsv = (
       "Päivämäärä (UTC)",
       "Luovutuksen tyyppi",
       "Luovutetut määrät",
+      "Valuuttakurssit",
       "Luovutuserien ID:t",
       "Tyyppi",
       "Arvo sisään (€)",
@@ -105,6 +120,7 @@ type FillByTx = Map<
     batchIds: Set<string>;
     dispKinds: Set<DispKind>;
     disposalsByCurrency: Map<Currency, bigint>;
+    disposalsByKindCurrency: Map<string, { dispKind: DispKind; currency: Currency }>;
   }
 >;
 
@@ -118,11 +134,20 @@ function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
       batchIds: new Set<string>(),
       dispKinds: new Set<DispKind>(),
       disposalsByCurrency: new Map<Currency, bigint>(),
+      disposalsByKindCurrency: new Map(),
     };
     cur.batchIds.add(f.batchId);
     cur.dispKinds.add(f.dispKind);
     const currentAmount = cur.disposalsByCurrency.get(f.currency) ?? 0n;
     cur.disposalsByCurrency.set(f.currency, currentAmount + f.amountStroops);
+
+    // Track (dispKind, currency) combinations for exchange rate display
+    const kindCurrencyKey = `${f.dispKind}:${f.currency}`;
+    cur.disposalsByKindCurrency.set(kindCurrencyKey, {
+      dispKind: f.dispKind,
+      currency: f.currency,
+    });
+
     m.set(f.txHash, {
       proceeds: cur.proceeds + f.proceedsCents,
       cost: cur.cost + f.costCents,
@@ -130,6 +155,7 @@ function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
       batchIds: cur.batchIds,
       dispKinds: cur.dispKinds,
       disposalsByCurrency: cur.disposalsByCurrency,
+      disposalsByKindCurrency: cur.disposalsByKindCurrency,
     });
   }
   return m;
