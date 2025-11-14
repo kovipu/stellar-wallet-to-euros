@@ -25,13 +25,20 @@ export const buildTransactionsCsv = (
       batchIds: new Set<string>(),
       dispKinds: new Set<DispKind>(),
       disposalsByCurrency: new Map<Currency, bigint>(),
-      disposalsByKindCurrency: new Map<string, { dispKind: DispKind; currency: Currency }>(),
+      disposalsByKindCurrency: new Map<
+        string,
+        { dispKind: DispKind; currency: Currency }
+      >(),
     };
 
     // Get exchange rates per disposal type and currency from priceBook
     const exchangeRates = Array.from(agg.disposalsByKindCurrency.values())
       .map((disposal) => {
-        const priceEntry = getCachedPrice(priceBook, disposal.currency, dateKeyUTC(tx.date));
+        const priceEntry = getCachedPrice(
+          priceBook,
+          disposal.currency,
+          dateKeyUTC(tx.date),
+        );
         if (!priceEntry) return null;
         return `${dispKindFi(disposal.dispKind)}: ${disposal.currency} @ ${formatPriceMicro(priceEntry.priceMicroEur)} €/yksikkö`;
       })
@@ -122,7 +129,10 @@ type FillByTx = Map<
     batchIds: Set<string>;
     dispKinds: Set<DispKind>;
     disposalsByCurrency: Map<Currency, bigint>;
-    disposalsByKindCurrency: Map<string, { dispKind: DispKind; currency: Currency }>;
+    disposalsByKindCurrency: Map<
+      string,
+      { dispKind: DispKind; currency: Currency }
+    >;
   }
 >;
 
