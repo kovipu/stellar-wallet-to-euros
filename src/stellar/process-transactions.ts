@@ -188,6 +188,7 @@ export function processTransactions(
       feeStroops: fee,
       ops: rowOps,
       balances: structuredClone(balances),
+      horizonRaw: { tx, ops, trades },
     });
   }
   return txRows;

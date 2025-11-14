@@ -12,6 +12,7 @@ type TxRow = {
   feeStroops: bigint; // applied once per tx (0 if not your fee)
   ops: TxOpSummary[]; // human-friendly summary of what changed
   balances: Balances; // snapshot after this tx
+  horizonRaw: any; // raw Horizon data (tx, ops, trades)
 };
 
 type TxOpSummary =
