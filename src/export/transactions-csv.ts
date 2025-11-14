@@ -3,7 +3,8 @@ import { formatCents, toDecimal } from "../domain/units";
 import { PriceBook } from "../pricing/price-service";
 import { valueTxInEUR } from "../report/valuation";
 import { writeFileSync } from "fs";
-import { Fill } from "../report/fifo";
+import { DispKind, Fill } from "../report/fifo";
+import { dispKindFi } from "./fifo-csv";
 
 /** Convert TxRows to a csv format */
 export const buildTransactionsCsv = (
@@ -20,10 +21,15 @@ export const buildTransactionsCsv = (
       cost: 0n,
       pl: 0n,
       batchIds: new Set<string>(),
+      dispKinds: new Set<DispKind>(),
     };
 
     return {
       "Päivämäärä (UTC)": tx.date.toISOString(),
+      "Luovutuksen tyyppi": Array.from(agg.dispKinds)
+        .map(dispKindFi)
+        .join(", "),
+      "Luovutuserien ID:t": Array.from(agg.batchIds).join(", "),
       Tyyppi: tx.ops.map((op) => op.kind).join(", "),
       "Arvo sisään (€)": formatCents(flow.inCents),
       "Arvo ulos (€)": formatCents(flow.outCents),
@@ -31,7 +37,6 @@ export const buildTransactionsCsv = (
       "Luovutushinta (€)": formatCents(agg.proceeds),
       "Hankintameno (€)": formatCents(agg.cost),
       "FIFO-voitto/tappio (€)": formatCents(agg.pl),
-      "Luovutuserien ID:t": Array.from(agg.batchIds).join(", "),
       "Verkkopalkkio (XLM)": toDecimal(tx.feeStroops),
       "Verkkopalkkio (€)": formatCents(feeEurCents),
       "XLM-saldo": toDecimal(tx.balances.XLM),
@@ -53,6 +58,8 @@ export const buildTransactionsCsv = (
     header: true,
     columns: [
       "Päivämäärä (UTC)",
+      "Luovutuksen tyyppi",
+      "Luovutuserien ID:t",
       "Tyyppi",
       "Arvo sisään (€)",
       "Arvo ulos (€)",
@@ -60,7 +67,6 @@ export const buildTransactionsCsv = (
       "Luovutushinta (€)",
       "Hankintameno (€)",
       "FIFO-voitto/tappio (€)",
-      "Luovutuserien ID:t",
       "Verkkopalkkio (XLM)",
       "Verkkopalkkio (€)",
       "XLM-saldo",
@@ -78,7 +84,7 @@ export function writeTransactionsCsvFile(
   txRows: TxRow[],
   priceBook: PriceBook,
   fills: ReadonlyArray<Fill>,
-  filePath = "report.csv",
+  filePath = "transactions.csv",
 ): void {
   const csv = buildTransactionsCsv(txRows, priceBook, fills);
   writeFileSync(filePath, csv, "utf8");
@@ -87,7 +93,13 @@ export function writeTransactionsCsvFile(
 
 type FillByTx = Map<
   string,
-  { proceeds: bigint; cost: bigint; pl: bigint; batchIds: Set<string> }
+  {
+    proceeds: bigint;
+    cost: bigint;
+    pl: bigint;
+    batchIds: Set<string>;
+    dispKinds: Set<DispKind>;
+  }
 >;
 
 function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
@@ -98,13 +110,16 @@ function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
       cost: 0n,
       pl: 0n,
       batchIds: new Set<string>(),
+      dispKinds: new Set<DispKind>(),
     };
     cur.batchIds.add(f.batchId);
+    cur.dispKinds.add(f.dispKind);
     m.set(f.txHash, {
       proceeds: cur.proceeds + f.proceedsCents,
       cost: cur.cost + f.costCents,
       pl: cur.pl + f.gainLossCents,
       batchIds: cur.batchIds,
+      dispKinds: cur.dispKinds,
     });
   }
   return m;
