@@ -69,6 +69,7 @@ export const buildTransactionsCsv = (
           ? formatCents(balances.totalCents)
           : "",
       "Tapahtuman linkki": `https://stellar.expert/explorer/public/tx/${tx.transactionHash}`,
+      Lähdedata: JSON.stringify(tx.horizonRaw),
     };
   });
 
@@ -96,6 +97,7 @@ export const buildTransactionsCsv = (
       "EURC-saldo",
       "Kokonaissaldo (€)",
       "Tapahtuman linkki",
+      "Lähdedata",
     ],
   });
 };
