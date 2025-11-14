@@ -5,7 +5,7 @@ import { valueTxInEUR } from "../report/valuation";
 import { writeFileSync } from "fs";
 import { Fill } from "../report/fifo";
 
-/** Convert TxRows to a csv format and log to console for now */
+/** Convert TxRows to a csv format */
 export const buildTransactionsCsv = (
   txRows: TxRow[],
   priceBook: PriceBook,
@@ -19,6 +19,7 @@ export const buildTransactionsCsv = (
       proceeds: 0n,
       cost: 0n,
       pl: 0n,
+      batchIds: new Set<string>(),
     };
 
     return {
@@ -30,6 +31,7 @@ export const buildTransactionsCsv = (
       "Luovutushinta (€)": formatCents(agg.proceeds),
       "Hankintameno (€)": formatCents(agg.cost),
       "FIFO-voitto/tappio (€)": formatCents(agg.pl),
+      "Luovutuserien ID:t": Array.from(agg.batchIds).join(", "),
       "Verkkopalkkio (XLM)": toDecimal(tx.feeStroops),
       "Verkkopalkkio (€)": formatCents(feeEurCents),
       "XLM-saldo": toDecimal(tx.balances.XLM),
@@ -58,6 +60,7 @@ export const buildTransactionsCsv = (
       "Luovutushinta (€)",
       "Hankintameno (€)",
       "FIFO-voitto/tappio (€)",
+      "Luovutuserien ID:t",
       "Verkkopalkkio (XLM)",
       "Verkkopalkkio (€)",
       "XLM-saldo",
@@ -82,16 +85,26 @@ export function writeTransactionsCsvFile(
   console.log(`Wrote ${filePath}`);
 }
 
-type FillByTx = Map<string, { proceeds: bigint; cost: bigint; pl: bigint }>;
+type FillByTx = Map<
+  string,
+  { proceeds: bigint; cost: bigint; pl: bigint; batchIds: Set<string> }
+>;
 
 function indexFillsByTx(fills: ReadonlyArray<Fill>): FillByTx {
   const m: FillByTx = new Map();
   for (const f of fills) {
-    const cur = m.get(f.txHash) ?? { proceeds: 0n, cost: 0n, pl: 0n };
+    const cur = m.get(f.txHash) ?? {
+      proceeds: 0n,
+      cost: 0n,
+      pl: 0n,
+      batchIds: new Set<string>(),
+    };
+    cur.batchIds.add(f.batchId);
     m.set(f.txHash, {
       proceeds: cur.proceeds + f.proceedsCents,
       cost: cur.cost + f.costCents,
       pl: cur.pl + f.gainLossCents,
+      batchIds: cur.batchIds,
     });
   }
   return m;
