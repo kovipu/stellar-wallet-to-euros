@@ -103,7 +103,7 @@ describe("buildEventsCsv", () => {
     expect(csv.split("\n").length).toBe(2); // Only header + empty line
   });
 
-  it("should sort events by currency, then type (acquisition before disposal), then timestamp", () => {
+  it("should sort events by currency, then timestamp", () => {
     const usdcBatch: Batch = {
       batchId: "USDC#0001",
       currency: "USDC",
@@ -153,9 +153,9 @@ describe("buildEventsCsv", () => {
     expect(lines.length).toBe(5);
     expect(lines[1]).toContain("USDC"); // USDC comes before XLM alphabetically
     expect(lines[2]).toContain("XLM");
-    expect(lines[2]).toContain("Hankinta"); // Acquisition before disposal for XLM
+    expect(lines[2]).toContain("Hankinta"); // XLM acquisition (earlier timestamp)
     expect(lines[3]).toContain("XLM");
-    expect(lines[3]).toContain("Luovutus"); // Disposal after acquisition
+    expect(lines[3]).toContain("Luovutus"); // XLM disposal (later timestamp)
   });
 
   it("should sort acquisitions by timestamp within same currency", () => {
@@ -192,5 +192,66 @@ describe("buildEventsCsv", () => {
 
     expect(lines[1]).toContain("XLM#0002"); // Earlier timestamp first
     expect(lines[2]).toContain("XLM#0001"); // Later timestamp second
+  });
+
+  it("should sort disposals by timestamp", () => {
+    const batch: Batch = {
+      batchId: "XLM#0001",
+      currency: "XLM",
+      acquiredAt: new Date("2025-03-01T10:00:00Z"),
+      qtyInitialStroops: 1000_0000000n,
+      qtyRemainingStroops: 0n,
+      priceMicroAtAcq: 250000n,
+      acqKind: "payment_in",
+      acqTxHash: "abc",
+    };
+
+    const fill1: Fill = {
+      batchId: "XLM#0001",
+      currency: "XLM",
+      amountStroops: 500_0000000n,
+      acquiredAt: new Date("2025-03-01T10:00:00Z"),
+      disposedAt: new Date("2025-04-05T15:00:00Z"), // Later disposal
+      acqPriceMicro: 250000n,
+      dispPriceMicro: 300000n,
+      costCents: 12500n,
+      proceedsCents: 15000n,
+      gainLossCents: 2500n,
+      dispKind: "swap_out",
+      txHash: "def",
+    };
+
+    const fill2: Fill = {
+      batchId: "XLM#0001",
+      currency: "XLM",
+      amountStroops: 500_0000000n,
+      acquiredAt: new Date("2025-03-01T10:00:00Z"),
+      disposedAt: new Date("2025-04-02T10:00:00Z"), // Earlier disposal
+      acqPriceMicro: 250000n,
+      dispPriceMicro: 280000n,
+      costCents: 12500n,
+      proceedsCents: 14000n,
+      gainLossCents: 1500n,
+      dispKind: "payment_out",
+      txHash: "ghi",
+    };
+
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [batch],
+      USDC: [],
+      EURC: [],
+    };
+    const fills: Fill[] = [fill1, fill2];
+
+    const csv = buildEventsCsv(batches, fills);
+    const lines = csv.split("\n");
+
+    // Should be sorted by timestamp: batch (March 1), fill2 (April 2), fill1 (April 5)
+    expect(lines[1]).toContain("2025-03-01"); // Acquisition first (earliest)
+    expect(lines[1]).toContain("Hankinta");
+    expect(lines[2]).toContain("2025-04-02"); // Earlier disposal
+    expect(lines[2]).toContain("Luovutus");
+    expect(lines[3]).toContain("2025-04-05"); // Later disposal
+    expect(lines[3]).toContain("Luovutus");
   });
 });

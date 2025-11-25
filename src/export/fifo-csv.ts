@@ -7,15 +7,15 @@ import { stringify } from "csv-stringify/sync";
 
 type Event =
   | {
-      type: "acquisition";
-      date: Date;
-      batch: Batch;
-    }
+    type: "acquisition";
+    date: Date;
+    batch: Batch;
+  }
   | {
-      type: "disposal";
-      date: Date;
-      fill: Fill;
-    };
+    type: "disposal";
+    date: Date;
+    fill: Fill;
+  };
 
 export function buildEventsCsv(
   batches: Record<Currency, Batch[]>,
@@ -47,7 +47,7 @@ export function buildEventsCsv(
     });
   }
 
-  // Sort by: 1) currency, 2) type (acquisition before disposal), 3) timestamp
+  // Sort by: 1) currency, 2) timestamp
   events.sort((a, b) => {
     const currencyA =
       a.type === "acquisition" ? a.batch.currency : a.fill.currency;
@@ -59,12 +59,7 @@ export function buildEventsCsv(
       return currencyA.localeCompare(currencyB);
     }
 
-    // Then by type (acquisitions before disposals)
-    if (a.type !== b.type) {
-      return a.type === "acquisition" ? -1 : 1;
-    }
-
-    // Finally by timestamp
+    // Then by timestamp
     return a.date.getTime() - b.date.getTime();
   });
 
