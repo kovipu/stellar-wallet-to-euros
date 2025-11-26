@@ -63,6 +63,9 @@ export function buildEventsCsv(
     return a.date.getTime() - b.date.getTime();
   });
 
+  // Track running balance for each batch
+  const runningBalance = new Map<string, bigint>();
+
   const rows = events.map((e) => {
     if (e.type === "acquisition") {
       const b = e.batch;
@@ -70,12 +73,16 @@ export function buildEventsCsv(
         (b.qtyInitialStroops * b.priceMicroAtAcq + 50_000_000_000n) /
         100_000_000_000n;
 
+      // Initialize running balance for this batch
+      runningBalance.set(b.batchId, b.qtyInitialStroops);
+
       return {
         Tyyppi: "Hankinta",
         "Luovutushetki (UTC)": "", // No disposal yet
         Toiminto: acqKindFi(b.acqKind),
         Valuutta: b.currency,
         "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
+        "Erää jäljellä (kpl)": toDecimal(b.qtyInitialStroops),
         "Erä ID": b.batchId,
         "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
         "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
@@ -87,12 +94,19 @@ export function buildEventsCsv(
       };
     } else {
       const f = e.fill;
+
+      // Update running balance for this batch
+      const currentBalance = runningBalance.get(f.batchId) ?? 0n;
+      const newBalance = currentBalance - f.amountStroops;
+      runningBalance.set(f.batchId, newBalance);
+
       return {
         Tyyppi: "Luovutus",
         "Luovutushetki (UTC)": f.disposedAt.toISOString(),
         Toiminto: dispKindFi(f.dispKind),
         Valuutta: f.currency,
         "Erän koko (kpl)": "-" + toDecimal(f.amountStroops),
+        "Erää jäljellä (kpl)": toDecimal(newBalance),
         "Erä ID": f.batchId,
         "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
         "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
@@ -113,6 +127,7 @@ export function buildEventsCsv(
       "Toiminto",
       "Valuutta",
       "Erän koko (kpl)",
+      "Erää jäljellä (kpl)",
       "Erä ID",
       "Hankintahetki (UTC)",
       "Hankintahinta (€/kpl)",
