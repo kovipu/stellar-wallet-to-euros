@@ -9,7 +9,7 @@ describe("buildEventsCsv", () => {
 
     const csv = buildEventsCsv(batches, fills);
 
-    expect(csv).toContain("Tyyppi,Luovutushetki (UTC),Toiminto,Valuutta,Määrä");
+    expect(csv).toContain("Tyyppi,Luovutushetki (UTC),Toiminto,Valuutta,Erän koko (kpl)");
     expect(csv.split("\n").length).toBe(2); // header + empty line
   });
 
@@ -36,7 +36,7 @@ describe("buildEventsCsv", () => {
     expect(csv).toContain("Hankinta"); // Type
     expect(csv).toContain("Maksu sisään"); // Action (acqKindFi)
     expect(csv).toContain("XLM"); // Currency
-    expect(csv).toContain("1000,0000000"); // Amount
+    expect(csv).toContain("1000,0000000"); // Amount (positive for acquisition)
     expect(csv).toContain("XLM#0001"); // Batch ID
     expect(csv).toContain("2025-04-01T10:00:00.000Z"); // Acquisition time
     expect(csv).toContain("0,250000"); // Acquisition price
@@ -67,7 +67,7 @@ describe("buildEventsCsv", () => {
     expect(csv).toContain("Luovutus"); // Type
     expect(csv).toContain("Vaihto (ulos)"); // Action (dispKindFi)
     expect(csv).toContain("XLM"); // Currency
-    expect(csv).toContain("500,0000000"); // Amount
+    expect(csv).toContain("-500,0000000"); // Amount (negative for disposal)
     expect(csv).toContain("XLM#0001"); // Batch ID
     expect(csv).toContain("2025-04-01T10:00:00.000Z"); // Acquisition time
     expect(csv).toContain("2025-04-05T15:00:00.000Z"); // Disposal time
