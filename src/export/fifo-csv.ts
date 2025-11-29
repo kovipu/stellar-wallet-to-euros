@@ -7,15 +7,15 @@ import { stringify } from "csv-stringify/sync";
 
 type Event =
   | {
-    type: "acquisition";
-    date: Date;
-    batch: Batch;
-  }
+      type: "acquisition";
+      date: Date;
+      batch: Batch;
+    }
   | {
-    type: "disposal";
-    date: Date;
-    fill: Fill;
-  };
+      type: "disposal";
+      date: Date;
+      fill: Fill;
+    };
 
 export function buildEventsCsv(
   batches: Record<Currency, Batch[]>,
@@ -63,6 +63,9 @@ export function buildEventsCsv(
     return a.date.getTime() - b.date.getTime();
   });
 
+  // Track running balance for each batch
+  const runningBalance = new Map<string, bigint>();
+
   const rows = events.map((e) => {
     if (e.type === "acquisition") {
       const b = e.batch;
@@ -70,14 +73,18 @@ export function buildEventsCsv(
         (b.qtyInitialStroops * b.priceMicroAtAcq + 50_000_000_000n) /
         100_000_000_000n;
 
+      // Initialize running balance for this batch
+      runningBalance.set(b.batchId, b.qtyInitialStroops);
+
       return {
-        Tyyppi: "Hankinta",
-        "Luovutushetki (UTC)": "", // No disposal yet
-        Toiminto: acqKindFi(b.acqKind),
         Valuutta: b.currency,
-        "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
         "Erä ID": b.batchId,
+        Tyyppi: "Hankinta",
+        Toiminto: acqKindFi(b.acqKind),
         "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
+        "Luovutushetki (UTC)": "", // No disposal yet
+        "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
+        "Erää jäljellä (kpl)": toDecimal(b.qtyInitialStroops),
         "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
         "Luovutushinta (€/kpl)": "", // No disposal price yet
         "Luovutushinta (€)": "", // No proceeds yet
@@ -87,14 +94,21 @@ export function buildEventsCsv(
       };
     } else {
       const f = e.fill;
+
+      // Update running balance for this batch
+      const currentBalance = runningBalance.get(f.batchId) ?? 0n;
+      const newBalance = currentBalance - f.amountStroops;
+      runningBalance.set(f.batchId, newBalance);
+
       return {
-        Tyyppi: "Luovutus",
-        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
-        Toiminto: dispKindFi(f.dispKind),
         Valuutta: f.currency,
-        "Erän koko (kpl)": "-" + toDecimal(f.amountStroops),
         "Erä ID": f.batchId,
+        Tyyppi: "Luovutus",
+        Toiminto: dispKindFi(f.dispKind),
         "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
+        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
+        "Erän koko (kpl)": "-" + toDecimal(f.amountStroops),
+        "Erää jäljellä (kpl)": toDecimal(newBalance),
         "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
         "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
         "Luovutushinta (€)": formatCents(f.proceedsCents),
@@ -108,13 +122,14 @@ export function buildEventsCsv(
   return stringify(rows, {
     header: true,
     columns: [
-      "Tyyppi",
-      "Luovutushetki (UTC)",
-      "Toiminto",
       "Valuutta",
-      "Erän koko (kpl)",
       "Erä ID",
+      "Tyyppi",
+      "Toiminto",
       "Hankintahetki (UTC)",
+      "Luovutushetki (UTC)",
+      "Erän koko (kpl)",
+      "Erää jäljellä (kpl)",
       "Hankintahinta (€/kpl)",
       "Luovutushinta (€/kpl)",
       "Luovutushinta (€)",

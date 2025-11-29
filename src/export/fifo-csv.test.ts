@@ -9,7 +9,9 @@ describe("buildEventsCsv", () => {
 
     const csv = buildEventsCsv(batches, fills);
 
-    expect(csv).toContain("Tyyppi,Luovutushetki (UTC),Toiminto,Valuutta,Erän koko (kpl)");
+    expect(csv).toContain(
+      "Valuutta,Erä ID,Tyyppi,Toiminto,Hankintahetki (UTC),Luovutushetki (UTC),Erän koko (kpl),Erää jäljellä (kpl)",
+    );
     expect(csv.split("\n").length).toBe(2); // header + empty line
   });
 
