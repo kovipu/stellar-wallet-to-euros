@@ -7,15 +7,15 @@ import { stringify } from "csv-stringify/sync";
 
 type Event =
   | {
-    type: "acquisition";
-    date: Date;
-    batch: Batch;
-  }
+      type: "acquisition";
+      date: Date;
+      batch: Batch;
+    }
   | {
-    type: "disposal";
-    date: Date;
-    fill: Fill;
-  };
+      type: "disposal";
+      date: Date;
+      fill: Fill;
+    };
 
 export function buildEventsCsv(
   batches: Record<Currency, Batch[]>,
@@ -77,14 +77,14 @@ export function buildEventsCsv(
       runningBalance.set(b.batchId, b.qtyInitialStroops);
 
       return {
-        Tyyppi: "Hankinta",
-        "Luovutushetki (UTC)": "", // No disposal yet
-        Toiminto: acqKindFi(b.acqKind),
         Valuutta: b.currency,
+        "Erä ID": b.batchId,
+        Tyyppi: "Hankinta",
+        Toiminto: acqKindFi(b.acqKind),
+        "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
+        "Luovutushetki (UTC)": "", // No disposal yet
         "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
         "Erää jäljellä (kpl)": toDecimal(b.qtyInitialStroops),
-        "Erä ID": b.batchId,
-        "Hankintahetki (UTC)": b.acquiredAt.toISOString(),
         "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
         "Luovutushinta (€/kpl)": "", // No disposal price yet
         "Luovutushinta (€)": "", // No proceeds yet
@@ -101,14 +101,14 @@ export function buildEventsCsv(
       runningBalance.set(f.batchId, newBalance);
 
       return {
-        Tyyppi: "Luovutus",
-        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
-        Toiminto: dispKindFi(f.dispKind),
         Valuutta: f.currency,
+        "Erä ID": f.batchId,
+        Tyyppi: "Luovutus",
+        Toiminto: dispKindFi(f.dispKind),
+        "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
+        "Luovutushetki (UTC)": f.disposedAt.toISOString(),
         "Erän koko (kpl)": "-" + toDecimal(f.amountStroops),
         "Erää jäljellä (kpl)": toDecimal(newBalance),
-        "Erä ID": f.batchId,
-        "Hankintahetki (UTC)": f.acquiredAt.toISOString(),
         "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
         "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
         "Luovutushinta (€)": formatCents(f.proceedsCents),
@@ -122,14 +122,14 @@ export function buildEventsCsv(
   return stringify(rows, {
     header: true,
     columns: [
-      "Tyyppi",
-      "Luovutushetki (UTC)",
-      "Toiminto",
       "Valuutta",
+      "Erä ID",
+      "Tyyppi",
+      "Toiminto",
+      "Hankintahetki (UTC)",
+      "Luovutushetki (UTC)",
       "Erän koko (kpl)",
       "Erää jäljellä (kpl)",
-      "Erä ID",
-      "Hankintahetki (UTC)",
       "Hankintahinta (€/kpl)",
       "Luovutushinta (€/kpl)",
       "Luovutushinta (€)",
