@@ -2,12 +2,23 @@ import { describe, it, expect } from "vitest";
 import { buildEventsCsv, acqKindFi, dispKindFi } from "./fifo-csv";
 import { Batch, Fill } from "../report/fifo";
 
+// Mock txRows with final balances
+const mockTxRows: TxRow[] = [
+  {
+    transactionHash: "mock",
+    date: new Date("2025-01-01T00:00:00Z"),
+    ops: [],
+    feeStroops: 0n,
+    balances: { XLM: 0n, USDC: 0n, EURC: 0n },
+  },
+];
+
 describe("buildEventsCsv", () => {
   it("should generate empty CSV with headers when no events", () => {
     const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [] };
     const fills: Fill[] = [];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
 
     expect(csv).toContain(
       "Valuutta,Erä ID,Tyyppi,Toiminto,Hankintahetki (UTC),Luovutushetki (UTC),Erän koko (kpl),Erää jäljellä (kpl)",
@@ -33,7 +44,7 @@ describe("buildEventsCsv", () => {
     };
     const fills: Fill[] = [];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
 
     expect(csv).toContain("Hankinta"); // Type
     expect(csv).toContain("Maksu sisään"); // Action (acqKindFi)
@@ -64,7 +75,7 @@ describe("buildEventsCsv", () => {
     const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [] };
     const fills: Fill[] = [fill];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
 
     expect(csv).toContain("Luovutus"); // Type
     expect(csv).toContain("Vaihto (ulos)"); // Action (dispKindFi)
@@ -99,7 +110,7 @@ describe("buildEventsCsv", () => {
     };
     const fills: Fill[] = [];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
 
     expect(csv).not.toContain("EURC#PAR");
     expect(csv.split("\n").length).toBe(2); // Only header + empty line
@@ -148,16 +159,29 @@ describe("buildEventsCsv", () => {
     };
     const fills: Fill[] = [xlmFill];
 
-    const csv = buildEventsCsv(batches, fills);
+    // Mock txRows with expected final balances: USDC=100, XLM=500 (1000-500)
+    const testTxRows: TxRow[] = [
+      {
+        transactionHash: "test",
+        date: new Date("2025-04-03T10:00:00Z"),
+        ops: [],
+        feeStroops: 0n,
+        balances: { XLM: 500_0000000n, USDC: 100_0000000n, EURC: 0n },
+      },
+    ];
+
+    const csv = buildEventsCsv(batches, fills, testTxRows);
     const lines = csv.split("\n");
 
-    // Should be: header, USDC acquisition, XLM acquisition, XLM disposal, empty
-    expect(lines.length).toBe(5);
+    // Should be: header, USDC acquisition, USDC summary, XLM acquisition, XLM disposal, XLM summary, empty
+    expect(lines.length).toBe(7);
     expect(lines[1]).toContain("USDC"); // USDC comes before XLM alphabetically
-    expect(lines[2]).toContain("XLM");
-    expect(lines[2]).toContain("Hankinta"); // XLM acquisition (earlier timestamp)
+    expect(lines[2]).toContain("100,0000000"); // USDC summary row with ending balance
     expect(lines[3]).toContain("XLM");
-    expect(lines[3]).toContain("Luovutus"); // XLM disposal (later timestamp)
+    expect(lines[3]).toContain("Hankinta"); // XLM acquisition (earlier timestamp)
+    expect(lines[4]).toContain("XLM");
+    expect(lines[4]).toContain("Luovutus"); // XLM disposal (later timestamp)
+    expect(lines[5]).toContain("500,0000000"); // XLM summary row with ending balance (1000 - 500)
   });
 
   it("should sort acquisitions by timestamp within same currency", () => {
@@ -189,7 +213,7 @@ describe("buildEventsCsv", () => {
     };
     const fills: Fill[] = [];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
     const lines = csv.split("\n");
 
     expect(lines[1]).toContain("XLM#0002"); // Earlier timestamp first
@@ -245,7 +269,7 @@ describe("buildEventsCsv", () => {
     };
     const fills: Fill[] = [fill1, fill2];
 
-    const csv = buildEventsCsv(batches, fills);
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
     const lines = csv.split("\n");
 
     // Should be sorted by timestamp: batch (March 1), fill2 (April 2), fill1 (April 5)
