@@ -112,9 +112,9 @@ describe("fifo.ts", () => {
         100_0000000n,
       );
 
-      // EURC has single par batch
+      // EURC has normal FIFO batch
       expect(result.endingBatches.EURC).toHaveLength(1);
-      expect(result.endingBatches.EURC[0].batchId).toBe("EURC#PAR");
+      expect(result.endingBatches.EURC[0].batchId).toBe("EURC#0001");
       expect(result.endingBatches.EURC[0].qtyRemainingStroops).toBe(
         50_0000000n,
       );
@@ -210,7 +210,7 @@ describe("fifo.ts", () => {
       expect(result.endingBatches.XLM).toHaveLength(0);
     });
 
-    it("should increment single EURC par batch, not create new ones", () => {
+    it("should create separate EURC batches like other currencies", () => {
       const txs = [
         createTx(new Date("2025-01-01"), [
           {
@@ -238,14 +238,19 @@ describe("fifo.ts", () => {
 
       const result = computeFifoFills(txs, priceBook);
 
-      // Should still have only one EURC batch
-      expect(result.endingBatches.EURC).toHaveLength(1);
-      expect(result.endingBatches.EURC[0].batchId).toBe("EURC#PAR");
+      // Should have two separate EURC batches
+      expect(result.endingBatches.EURC).toHaveLength(2);
+      expect(result.endingBatches.EURC[0].batchId).toBe("EURC#0001");
       expect(result.endingBatches.EURC[0].qtyRemainingStroops).toBe(
-        80_0000000n,
+        50_0000000n,
       );
-      expect(result.endingBatches.EURC[0].qtyInitialStroops).toBe(80_0000000n);
+      expect(result.endingBatches.EURC[0].qtyInitialStroops).toBe(50_0000000n);
       expect(result.endingBatches.EURC[0].priceMicroAtAcq).toBe(MICRO_PER_EUR);
+      expect(result.endingBatches.EURC[1].batchId).toBe("EURC#0002");
+      expect(result.endingBatches.EURC[1].qtyRemainingStroops).toBe(
+        30_0000000n,
+      );
+      expect(result.endingBatches.EURC[1].priceMicroAtAcq).toBe(MICRO_PER_EUR);
     });
 
     it("should sequence batch IDs correctly", () => {
@@ -1242,7 +1247,9 @@ describe("fifo.ts", () => {
 
       const priceBook = createPriceBook({});
 
-      expect(() => computeFifoFills(txs, priceBook)).toThrow(/EURC underflow/);
+      expect(() => computeFifoFills(txs, priceBook)).toThrow(
+        /FIFO underflow for EURC/,
+      );
     });
 
     it("should throw error mid-transaction when underflow occurs", () => {
@@ -1444,7 +1451,7 @@ describe("fifo.ts", () => {
       expect(fill.gainLossCents).toBe(-1000n);
     });
 
-    it("should accumulate EURC in single par batch across multiple acquisitions", () => {
+    it("should use FIFO for EURC across multiple batches", () => {
       const txs = [
         createTx(new Date("2025-01-01"), [
           {
@@ -1482,14 +1489,18 @@ describe("fifo.ts", () => {
 
       const result = computeFifoFills(txs, priceBook);
 
-      // Single fill (not multiple like XLM/USDC would be)
+      // Single fill consuming from first batch (FIFO)
       expect(result.fills).toHaveLength(1);
-      expect(result.fills[0].batchId).toBe("EURC#PAR");
+      expect(result.fills[0].batchId).toBe("EURC#0001");
       expect(result.fills[0].amountStroops).toBe(75_0000000n);
 
-      // Ending batch has 75 remaining (100 + 50 - 75)
+      // Two batches: first has 25 remaining, second has 50
+      expect(result.endingBatches.EURC).toHaveLength(2);
       expect(result.endingBatches.EURC[0].qtyRemainingStroops).toBe(
-        75_0000000n,
+        25_0000000n,
+      );
+      expect(result.endingBatches.EURC[1].qtyRemainingStroops).toBe(
+        50_0000000n,
       );
     });
 
@@ -1958,7 +1969,7 @@ describe("fifo.ts", () => {
       expect(result.endingBatches.XLM[1].qtyRemainingStroops).toBe(50_0000000n);
     });
 
-    it("should always have EURC par batch present", () => {
+    it("should have empty EURC inventory when never used", () => {
       const txs = [
         createTx(new Date("2025-01-01"), [
           {
@@ -1976,14 +1987,11 @@ describe("fifo.ts", () => {
 
       const result = computeFifoFills(txs, priceBook);
 
-      // EURC batch should always exist even if never used
-      expect(result.endingBatches.EURC).toHaveLength(1);
-      expect(result.endingBatches.EURC[0].batchId).toBe("EURC#PAR");
-      expect(result.endingBatches.EURC[0].priceMicroAtAcq).toBe(MICRO_PER_EUR);
-      expect(result.endingBatches.EURC[0].qtyRemainingStroops).toBe(0n);
+      // EURC inventory should be empty if never used
+      expect(result.endingBatches.EURC).toHaveLength(0);
     });
 
-    it("should accumulate EURC totals in single batch", () => {
+    it("should track EURC in separate FIFO batches", () => {
       const txs = [
         createTx(new Date("2025-01-01"), [
           {
@@ -2021,9 +2029,16 @@ describe("fifo.ts", () => {
 
       const result = computeFifoFills(txs, priceBook);
 
-      const eurcBatch = result.endingBatches.EURC[0];
-      expect(eurcBatch.qtyInitialStroops).toBe(150_0000000n); // 100 + 50
-      expect(eurcBatch.qtyRemainingStroops).toBe(70_0000000n); // 150 - 80
+      // Should have 2 batches with FIFO consumption
+      expect(result.endingBatches.EURC).toHaveLength(2);
+      expect(result.endingBatches.EURC[0].qtyInitialStroops).toBe(100_0000000n);
+      expect(result.endingBatches.EURC[0].qtyRemainingStroops).toBe(
+        20_0000000n,
+      ); // 100 - 80
+      expect(result.endingBatches.EURC[1].qtyInitialStroops).toBe(50_0000000n);
+      expect(result.endingBatches.EURC[1].qtyRemainingStroops).toBe(
+        50_0000000n,
+      ); // untouched
     });
 
     it("should track multiple XLM batches with correct remaining quantities", () => {
