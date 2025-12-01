@@ -73,7 +73,7 @@ async function main() {
 
     writeTransactionsCsvFile(txRows, priceBook, fills);
     writeInventoryCsvFile(endingBatches);
-    writeEventsCsvFile(endingBatches, fills);
+    writeEventsCsvFile(endingBatches, fills, txRows);
   } catch (error) {
     console.error("Error:", (error as Error).message);
   } finally {

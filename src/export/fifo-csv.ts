@@ -20,7 +20,16 @@ type Event =
 export function buildEventsCsv(
   batches: Record<Currency, Batch[]>,
   fills: ReadonlyArray<Fill>,
+  txRows: readonly TxRow[],
 ): string {
+  // Get final balances from the last transaction (actual wallet balances)
+  const lastTx = txRows[txRows.length - 1];
+  const finalBalances: Record<Currency, bigint> = {
+    XLM: lastTx.balances.XLM,
+    USDC: lastTx.balances.USDC,
+    EURC: lastTx.balances.EURC,
+  };
+
   const events: Event[] = [];
 
   // Add all acquisitions (batches)
@@ -66,7 +75,19 @@ export function buildEventsCsv(
   // Track running balance for each batch
   const runningBalance = new Map<string, bigint>();
 
-  const rows = events.map((e) => {
+  const rows: any[] = [];
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    const nextEvent = i < events.length - 1 ? events[i + 1] : null;
+    const currentCurrency =
+      e.type === "acquisition" ? e.batch.currency : e.fill.currency;
+    const nextCurrency = nextEvent
+      ? nextEvent.type === "acquisition"
+        ? nextEvent.batch.currency
+        : nextEvent.fill.currency
+      : null;
+
     if (e.type === "acquisition") {
       const b = e.batch;
       const totalCostCents =
@@ -76,7 +97,7 @@ export function buildEventsCsv(
       // Initialize running balance for this batch
       runningBalance.set(b.batchId, b.qtyInitialStroops);
 
-      return {
+      rows.push({
         Valuutta: b.currency,
         "Erä ID": b.batchId,
         Tyyppi: "Hankinta",
@@ -85,13 +106,14 @@ export function buildEventsCsv(
         "Luovutushetki (UTC)": "", // No disposal yet
         "Erän koko (kpl)": toDecimal(b.qtyInitialStroops),
         "Erää jäljellä (kpl)": toDecimal(b.qtyInitialStroops),
+        "Loppusaldo (kpl)": "", // Empty for regular rows
         "Hankintahinta (€/kpl)": formatPriceMicro(b.priceMicroAtAcq),
         "Luovutushinta (€/kpl)": "", // No disposal price yet
         "Luovutushinta (€)": "", // No proceeds yet
         "Hankintameno (€)": formatCents(totalCostCents),
         "Voitto/Tappio (€)": "", // No gain/loss yet
         "Transaction Hash": b.acqTxHash,
-      };
+      });
     } else {
       const f = e.fill;
 
@@ -100,7 +122,7 @@ export function buildEventsCsv(
       const newBalance = currentBalance - f.amountStroops;
       runningBalance.set(f.batchId, newBalance);
 
-      return {
+      rows.push({
         Valuutta: f.currency,
         "Erä ID": f.batchId,
         Tyyppi: "Luovutus",
@@ -109,15 +131,37 @@ export function buildEventsCsv(
         "Luovutushetki (UTC)": f.disposedAt.toISOString(),
         "Erän koko (kpl)": "-" + toDecimal(f.amountStroops),
         "Erää jäljellä (kpl)": toDecimal(newBalance),
+        "Loppusaldo (kpl)": "", // Empty for regular rows
         "Hankintahinta (€/kpl)": formatPriceMicro(f.acqPriceMicro),
         "Luovutushinta (€/kpl)": formatPriceMicro(f.dispPriceMicro),
         "Luovutushinta (€)": formatCents(f.proceedsCents),
         "Hankintameno (€)": formatCents(f.costCents),
         "Voitto/Tappio (€)": formatCents(f.gainLossCents),
         "Transaction Hash": f.txHash,
-      };
+      });
     }
-  });
+
+    // Insert summary row if this is the last event of the currency
+    if (currentCurrency !== nextCurrency) {
+      rows.push({
+        Valuutta: "",
+        "Erä ID": "",
+        Tyyppi: "",
+        Toiminto: "",
+        "Hankintahetki (UTC)": "",
+        "Luovutushetki (UTC)": "",
+        "Erän koko (kpl)": "",
+        "Erää jäljellä (kpl)": "",
+        "Loppusaldo (kpl)": toDecimal(finalBalances[currentCurrency]),
+        "Hankintahinta (€/kpl)": "",
+        "Luovutushinta (€/kpl)": "",
+        "Luovutushinta (€)": "",
+        "Hankintameno (€)": "",
+        "Voitto/Tappio (€)": "",
+        "Transaction Hash": "",
+      });
+    }
+  }
 
   return stringify(rows, {
     header: true,
@@ -130,6 +174,7 @@ export function buildEventsCsv(
       "Luovutushetki (UTC)",
       "Erän koko (kpl)",
       "Erää jäljellä (kpl)",
+      "Loppusaldo (kpl)",
       "Hankintahinta (€/kpl)",
       "Luovutushinta (€/kpl)",
       "Luovutushinta (€)",
@@ -162,9 +207,10 @@ export const dispKindFi = (k: DispKind): string =>
 export function writeEventsCsvFile(
   batches: Record<Currency, Batch[]>,
   fills: ReadonlyArray<Fill>,
+  txRows: readonly TxRow[],
   path = "events.csv",
 ) {
-  const csv = buildEventsCsv(batches, fills);
+  const csv = buildEventsCsv(batches, fills, txRows);
   writeFileSync(path, csv, "utf8");
   const totalEvents =
     Object.values(batches)
