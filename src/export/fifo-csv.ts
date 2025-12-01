@@ -35,8 +35,8 @@ export function buildEventsCsv(
   // Add all acquisitions (batches)
   for (const [_currency, batchList] of Object.entries(batches)) {
     for (const batch of batchList) {
-      // Skip EURC par batch if it was never used
-      if (batch.batchId === "EURC#PAR" && batch.qtyInitialStroops === 0n) {
+      // Skip empty batches (never used)
+      if (batch.qtyInitialStroops === 0n) {
         continue;
       }
       events.push({
@@ -192,7 +192,6 @@ export const acqKindFi = (k: AcqKind): string =>
     payment_in: "Maksu sisään",
     swap_in: "Vaihto (sisään)",
     blend_withdraw: "Blend-nosto",
-    eurc_par: "EURC nimellisarvo",
   })[k];
 
 export const dispKindFi = (k: DispKind): string =>

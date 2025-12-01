@@ -92,27 +92,27 @@ describe("buildEventsCsv", () => {
     expect(csv).toContain("def456"); // Transaction hash
   });
 
-  it("should skip unused EURC par batch", () => {
-    const eurcParBatch: Batch = {
-      batchId: "EURC#PAR",
+  it("should skip empty batches", () => {
+    const emptyBatch: Batch = {
+      batchId: "EURC#0001",
       currency: "EURC",
       acquiredAt: new Date("2025-01-01T00:00:00Z"),
       qtyInitialStroops: 0n, // Never used
       qtyRemainingStroops: 0n,
       priceMicroAtAcq: 1000000n,
-      acqKind: "eurc_par",
-      acqTxHash: "par",
+      acqKind: "payment_in",
+      acqTxHash: "abc",
     };
     const batches: Record<Currency, Batch[]> = {
       XLM: [],
       USDC: [],
-      EURC: [eurcParBatch],
+      EURC: [emptyBatch],
     };
     const fills: Fill[] = [];
 
     const csv = buildEventsCsv(batches, fills, mockTxRows);
 
-    expect(csv).not.toContain("EURC#PAR");
+    expect(csv).not.toContain("EURC#0001");
     expect(csv.split("\n").length).toBe(2); // Only header + empty line
   });
 
