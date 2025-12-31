@@ -61,6 +61,12 @@ type TxOpSummary =
       kind: "set_options";
     }
   | {
+      kind: "begin_sponsoring_future_reserves";
+    }
+  | {
+      kind: "end_sponsoring_future_reserves";
+    }
+  | {
       kind: "create_claimable_balance";
       amount: string;
       currency: string;

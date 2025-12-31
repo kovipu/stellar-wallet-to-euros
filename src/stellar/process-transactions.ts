@@ -125,6 +125,14 @@ export function processTransactions(
         rowOps.push({
           kind: "set_options",
         });
+      } else if (op.type === "begin_sponsoring_future_reserves") {
+        rowOps.push({
+          kind: "begin_sponsoring_future_reserves",
+        });
+      } else if (op.type === "end_sponsoring_future_reserves") {
+        rowOps.push({
+          kind: "end_sponsoring_future_reserves",
+        });
       } else if (op.type === "create_claimable_balance") {
         rowOps.push({
           kind: "create_claimable_balance",
