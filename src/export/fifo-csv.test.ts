@@ -280,4 +280,84 @@ describe("buildEventsCsv", () => {
     expect(lines[3]).toContain("2025-04-05"); // Later disposal
     expect(lines[3]).toContain("Luovutus");
   });
+
+  it("should sort events with duplicate timestamps correctly", () => {
+    const batch1: Batch = {
+      batchId: "XLM#0001",
+      currency: "XLM",
+      acquiredAt: new Date("2025-03-26T18:55:14.000Z"),
+      qtyInitialStroops: 100_0000000n,
+      qtyRemainingStroops: 100_0000000n,
+      priceMicroAtAcq: 250000n,
+      acqKind: "payment_in",
+      acqTxHash: "tx1",
+    };
+
+    const batch2: Batch = {
+      batchId: "XLM#0002",
+      currency: "XLM",
+      acquiredAt: new Date("2025-03-26T18:55:14.000Z"), // Duplicate timestamp
+      qtyInitialStroops: 200_0000000n,
+      qtyRemainingStroops: 200_0000000n,
+      priceMicroAtAcq: 250000n,
+      acqKind: "payment_in",
+      acqTxHash: "tx2",
+    };
+
+    const batch3: Batch = {
+      batchId: "XLM#0003",
+      currency: "XLM",
+      acquiredAt: new Date("2025-04-02T17:07:16.000Z"),
+      qtyInitialStroops: 150_0000000n,
+      qtyRemainingStroops: 150_0000000n,
+      priceMicroAtAcq: 260000n,
+      acqKind: "payment_in",
+      acqTxHash: "tx3",
+    };
+
+    const batch4: Batch = {
+      batchId: "XLM#0004",
+      currency: "XLM",
+      acquiredAt: new Date("2025-04-04T19:25:04.000Z"),
+      qtyInitialStroops: 300_0000000n,
+      qtyRemainingStroops: 300_0000000n,
+      priceMicroAtAcq: 270000n,
+      acqKind: "payment_in",
+      acqTxHash: "tx4",
+    };
+
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [batch4, batch2, batch3, batch1], // Intentionally out of order
+      USDC: [],
+      EURC: [],
+    };
+    const fills: Fill[] = [];
+
+    const csv = buildEventsCsv(batches, fills, mockTxRows);
+    const lines = csv.split("\n");
+
+    // Verify header
+    expect(lines[0]).toContain("Valuutta");
+
+    // Lines should be sorted by timestamp (2025-03-26 twice, then 2025-04-02, then 2025-04-04)
+    expect(lines[1]).toContain("2025-03-26T18:55:14.000Z");
+    expect(lines[2]).toContain("2025-03-26T18:55:14.000Z");
+    expect(lines[3]).toContain("2025-04-02T17:07:16.000Z");
+    expect(lines[4]).toContain("2025-04-04T19:25:04.000Z");
+
+    // Both events with duplicate timestamp should appear (order between duplicates can be either way)
+    const line1HasTx1 = lines[1].includes("tx1");
+    const line2HasTx2 = lines[2].includes("tx2");
+    const line1HasTx2 = lines[1].includes("tx2");
+    const line2HasTx1 = lines[2].includes("tx1");
+
+    // Either (line1 has tx1 AND line2 has tx2) OR (line1 has tx2 AND line2 has tx1)
+    expect(
+      (line1HasTx1 && line2HasTx2) || (line1HasTx2 && line2HasTx1),
+    ).toBeTruthy();
+
+    // Later timestamps should have their corresponding transaction hashes
+    expect(lines[3]).toContain("tx3");
+    expect(lines[4]).toContain("tx4");
+  });
 });
