@@ -139,6 +139,10 @@ async function hydrateXlmRangeAround(
   url.searchParams.set("to", String(toSec));
   url.searchParams.set("x_cg_demo_api_key", process.env.COINGECKO_API_KEY!!);
   const res = await fetch(url);
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`CoinGecko API error (${res.status}): ${errorText}`);
+  }
   const data = await res.json();
   const prices: [number, number][] = data?.prices ?? [];
 
@@ -166,6 +170,10 @@ async function fetchUsdToEurMicro(dateKey: string): Promise<bigint> {
   url.searchParams.set("from", "USD");
   url.searchParams.set("to", "EUR");
   const res = await fetch(url);
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Frankfurter API error (${res.status}): ${errorText}`);
+  }
   const data = await res.json();
   const rate = data?.rates?.EUR;
   if (typeof rate !== "number") {
