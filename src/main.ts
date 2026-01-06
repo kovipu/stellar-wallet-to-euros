@@ -4,10 +4,7 @@ import { writeTransactionsCsvFile } from "./export/transactions-csv";
 import { loadPriceCache, saveCache } from "./pricing/price-cache";
 import { buildPriceBook } from "./pricing/price-service";
 import { computeFifoFills } from "./report/fifo";
-import {
-  writeInventoryCsvFile,
-  writeEventsCsvFile,
-} from "./export/fifo-csv";
+import { writeInventoryCsvFile, writeEventsCsvFile } from "./export/fifo-csv";
 
 // Get transactions and calculate their taxes with first in first out
 async function main() {
@@ -27,7 +24,9 @@ async function main() {
   if (endDateArg) {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(endDateArg)) {
-      console.error(`Error: Invalid date format "${endDateArg}". Use YYYY-MM-DD format.`);
+      console.error(
+        `Error: Invalid date format "${endDateArg}". Use YYYY-MM-DD format.`,
+      );
       process.exit(1);
     }
     // Parse as end of day UTC
@@ -47,19 +46,23 @@ async function main() {
     if (endDate) {
       const beforeCount = allTransactions.length;
       allTransactions = allTransactions.filter(
-        (txWithOps) => new Date(txWithOps.tx.created_at) <= endDate
+        (txWithOps) => new Date(txWithOps.tx.created_at) <= endDate,
       );
       console.log(
-        `Filtered to ${allTransactions.length} transactions (${beforeCount - allTransactions.length} excluded after ${endDateArg})`
+        `Filtered to ${allTransactions.length} transactions (${beforeCount - allTransactions.length} excluded after ${endDateArg})`,
       );
     }
 
     // Log date range
     if (allTransactions.length > 0) {
-      const firstDate = new Date(allTransactions[0].tx.created_at).toISOString().split("T")[0];
+      const firstDate = new Date(allTransactions[0].tx.created_at)
+        .toISOString()
+        .split("T")[0];
       const lastDate = new Date(
-        allTransactions[allTransactions.length - 1].tx.created_at
-      ).toISOString().split("T")[0];
+        allTransactions[allTransactions.length - 1].tx.created_at,
+      )
+        .toISOString()
+        .split("T")[0];
       console.log(`Processing transactions from ${firstDate} to ${lastDate}`);
     } else {
       console.log("No transactions to process");

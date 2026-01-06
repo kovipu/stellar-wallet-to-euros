@@ -69,8 +69,10 @@ export function buildEventsCsv(
     }
 
     // Then by batchId
-    const batchIdA = a.type === "acquisition" ? a.batch.batchId : a.fill.batchId;
-    const batchIdB = b.type === "acquisition" ? b.batch.batchId : b.fill.batchId;
+    const batchIdA =
+      a.type === "acquisition" ? a.batch.batchId : a.fill.batchId;
+    const batchIdB =
+      b.type === "acquisition" ? b.batch.batchId : b.fill.batchId;
     return batchIdA.localeCompare(batchIdB);
   });
 
