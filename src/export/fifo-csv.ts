@@ -56,7 +56,7 @@ export function buildEventsCsv(
     });
   }
 
-  // Sort by: 1) currency, 2) timestamp
+  // Sort by: 1) currency, 2) batchId
   events.sort((a, b) => {
     const currencyA =
       a.type === "acquisition" ? a.batch.currency : a.fill.currency;
@@ -68,8 +68,10 @@ export function buildEventsCsv(
       return currencyA.localeCompare(currencyB);
     }
 
-    // Then by timestamp
-    return a.date.getTime() - b.date.getTime();
+    // Then by batchId
+    const batchIdA = a.type === "acquisition" ? a.batch.batchId : a.fill.batchId;
+    const batchIdB = b.type === "acquisition" ? b.batch.batchId : b.fill.batchId;
+    return batchIdA.localeCompare(batchIdB);
   });
 
   // Track running balance for each batch

@@ -184,7 +184,7 @@ describe("buildEventsCsv", () => {
     expect(lines[5]).toContain("500,0000000"); // XLM summary row with ending balance (1000 - 500)
   });
 
-  it("should sort acquisitions by timestamp within same currency", () => {
+  it("should sort acquisitions by batch ID within same currency", () => {
     const batch1: Batch = {
       batchId: "XLM#0001",
       currency: "XLM",
@@ -216,11 +216,11 @@ describe("buildEventsCsv", () => {
     const csv = buildEventsCsv(batches, fills, mockTxRows);
     const lines = csv.split("\n");
 
-    expect(lines[1]).toContain("XLM#0002"); // Earlier timestamp first
-    expect(lines[2]).toContain("XLM#0001"); // Later timestamp second
+    expect(lines[1]).toContain("XLM#0001"); // Batch ID 0001 first alphabetically
+    expect(lines[2]).toContain("XLM#0002"); // Batch ID 0002 second alphabetically
   });
 
-  it("should sort disposals by timestamp", () => {
+  it("should maintain insertion order for events with same batch ID", () => {
     const batch: Batch = {
       batchId: "XLM#0001",
       currency: "XLM",
@@ -272,12 +272,12 @@ describe("buildEventsCsv", () => {
     const csv = buildEventsCsv(batches, fills, mockTxRows);
     const lines = csv.split("\n");
 
-    // Should be sorted by timestamp: batch (March 1), fill2 (April 2), fill1 (April 5)
-    expect(lines[1]).toContain("2025-03-01"); // Acquisition first (earliest)
+    // Should be sorted by batch ID (all XLM#0001), maintaining insertion order
+    expect(lines[1]).toContain("2025-03-01"); // Acquisition first
     expect(lines[1]).toContain("Hankinta");
-    expect(lines[2]).toContain("2025-04-02"); // Earlier disposal
+    expect(lines[2]).toContain("2025-04-05"); // fill1 (added first to fills array)
     expect(lines[2]).toContain("Luovutus");
-    expect(lines[3]).toContain("2025-04-05"); // Later disposal
+    expect(lines[3]).toContain("2025-04-02"); // fill2 (added second to fills array)
     expect(lines[3]).toContain("Luovutus");
   });
 
