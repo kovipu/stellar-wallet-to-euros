@@ -60,8 +60,11 @@ export function processTransactions(
         );
         const sourceAmountStroops = toStroops(op.source_amount);
 
-        if (op.to === walletAddress) {
-          // treat as swap: source debited, destination credited
+        const isReceiver = op.to === walletAddress;
+        const isSender = op.from === walletAddress;
+
+        if (isSender && isReceiver) {
+          // Self path payment: treat as swap (debit source, credit destination)
           const destinationCurrency = toCurrency(op.asset_type, op.asset_code);
           const destinationAmountStroops = toStroops(op.amount);
           rowOps.push({
@@ -73,8 +76,21 @@ export function processTransactions(
           });
           balances[sourceCurrency] -= sourceAmountStroops;
           balances[destinationCurrency] += destinationAmountStroops;
-        } else {
-          // outbound payment via path
+        } else if (isReceiver) {
+          // Receiving a path payment: only credit destination asset
+          const destinationCurrency = toCurrency(op.asset_type, op.asset_code);
+          const destinationAmountStroops = toStroops(op.amount);
+          rowOps.push({
+            kind: "payment",
+            direction: "in",
+            from: op.from,
+            to: op.to,
+            currency: destinationCurrency,
+            amountStroops: destinationAmountStroops,
+          });
+          balances[destinationCurrency] += destinationAmountStroops;
+        } else if (isSender) {
+          // Sending a path payment: only debit source asset
           rowOps.push({
             kind: "swap_fee",
             from: op.from,
@@ -124,6 +140,14 @@ export function processTransactions(
       } else if (op.type === "set_options") {
         rowOps.push({
           kind: "set_options",
+        });
+      } else if (op.type === "begin_sponsoring_future_reserves") {
+        rowOps.push({
+          kind: "begin_sponsoring_future_reserves",
+        });
+      } else if (op.type === "end_sponsoring_future_reserves") {
+        rowOps.push({
+          kind: "end_sponsoring_future_reserves",
         });
       } else if (op.type === "create_claimable_balance") {
         rowOps.push({
@@ -179,7 +203,9 @@ export function processTransactions(
 
     // Apply TX fee once, only if we are the fee payer
     const fee = tx.fee_account === walletAddress ? BigInt(tx.fee_charged) : 0n;
-    if (fee > 0n) balances.XLM -= fee;
+    if (fee > 0n) {
+      balances.XLM -= fee;
+    }
 
     // Snapshot transaction and balances
     txRows.push({
