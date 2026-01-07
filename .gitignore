@@ -1,6 +1,6 @@
 dataset
 *.csv
 node_modules
-.env
+.env*
 price_cache.json
 CLAUDE.md
