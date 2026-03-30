@@ -4,12 +4,22 @@ const STROOPSxMICRO_PER_CENT = STROOPS_PER_UNIT * (MICRO_PER_EUR / 100n); // 10^
 
 export const DAY_IN_MS = 86_400_000;
 
+const KNOWN_CURRENCIES = new Set<string>(["XLM", "USDC", "EURC", "BLND"]);
+
 export const toCurrency = (
   assetType: string,
   assetCode: string | undefined,
 ): Currency => {
   if (assetType === "native") return "XLM";
   if (!assetCode) throw new Error("Asset code is required");
+  if (!KNOWN_CURRENCIES.has(assetCode)) {
+    throw new Error(
+      `Unknown token "${assetCode}". To add support, add it to:\n` +
+        `  1. Currency type and Balances in src/domain/types.ts\n` +
+        `  2. KNOWN_CURRENCIES in src/domain/units.ts\n` +
+        `  3. COINGECKO_IDS in src/pricing/price-service.ts`,
+    );
+  }
   return assetCode as Currency;
 };
 
