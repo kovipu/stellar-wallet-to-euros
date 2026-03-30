@@ -71,6 +71,9 @@ export const buildTransactionsCsv = (
       "USDC-saldo (€)":
         balances.usdcCents !== undefined ? formatCents(balances.usdcCents) : "",
       "EURC-saldo": toDecimal(tx.balances.EURC),
+      "BLND-saldo": toDecimal(tx.balances.BLND),
+      "BLND-saldo (€)":
+        balances.blndCents !== undefined ? formatCents(balances.blndCents) : "",
       "Kokonaissaldo (€)":
         balances.totalCents !== undefined
           ? formatCents(balances.totalCents)
@@ -102,6 +105,8 @@ export const buildTransactionsCsv = (
       "USDC-saldo",
       "USDC-saldo (€)",
       "EURC-saldo",
+      "BLND-saldo",
+      "BLND-saldo (€)",
       "Kokonaissaldo (€)",
       "Tapahtuman linkki",
       "Lähdedata",

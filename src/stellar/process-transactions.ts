@@ -11,6 +11,7 @@ export function processTransactions(
     XLM: 0n,
     USDC: 0n,
     EURC: 0n,
+    BLND: 0n,
   };
 
   for (const { tx, ops, trades } of transactions) {

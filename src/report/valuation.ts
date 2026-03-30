@@ -8,6 +8,7 @@ export type BalanceEuroValuation = {
   xlmCents?: Cents;
   usdcCents?: Cents;
   eurcCents?: Cents;
+  blndCents?: Cents;
   totalCents: Cents;
 };
 
@@ -51,7 +52,11 @@ export function valueTxInEUR(
     txRow.balances.EURC,
     priceMicroAt(priceBook, "EURC", dk),
   );
-  const totalCents = xlmCents + usdcCents + eurcCents;
+  const blndCents = valueCentsFromStroops(
+    txRow.balances.BLND,
+    priceMicroAt(priceBook, "BLND", dk),
+  );
+  const totalCents = xlmCents + usdcCents + eurcCents + blndCents;
 
   // per-tx flow (EUR cents)
   let inCents = 0n;
@@ -103,6 +108,7 @@ export function valueTxInEUR(
       xlmCents,
       usdcCents,
       eurcCents,
+      blndCents,
       totalCents,
     },
     flow: {

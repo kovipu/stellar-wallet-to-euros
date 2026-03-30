@@ -14,7 +14,8 @@ const createTx = (
   date,
   feeStroops,
   ops,
-  balances: { XLM: 0n, USDC: 0n, EURC: 0n },
+  balances: { XLM: 0n, USDC: 0n, EURC: 0n, BLND: 0n },
+  horizonRaw: {},
 });
 
 // Helper to create mock price book

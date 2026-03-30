@@ -1,9 +1,10 @@
-type Currency = "XLM" | "USDC" | "EURC";
+type Currency = "XLM" | "USDC" | "EURC" | "BLND";
 
 type Balances = {
   XLM: bigint;
   USDC: bigint;
   EURC: bigint;
+  BLND: bigint;
 };
 
 type TxRow = {
