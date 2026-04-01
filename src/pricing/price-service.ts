@@ -116,7 +116,7 @@ export async function priceMicroEUR(
 }
 
 /** Hydrate many XLM days in one CoinGecko call to avoid 429s. */
-async function hydrateXlmRangeAround(
+export async function hydrateXlmRangeAround(
   dateKey: string,
   cache: PriceCache,
   daysBack = 60,
@@ -165,7 +165,7 @@ async function hydrateXlmRangeAround(
 }
 
 /** Frankfurter (ECB) daily USD→EUR, returns micro-EUR per 1 USD (BigInt). */
-async function fetchUsdToEurMicro(dateKey: string): Promise<bigint> {
+export async function fetchUsdToEurMicro(dateKey: string): Promise<bigint> {
   const url = new URL(dateKey, "https://api.frankfurter.app/");
   url.searchParams.set("from", "USD");
   url.searchParams.set("to", "EUR");
