@@ -7,8 +7,7 @@ export type AcqKind =
   | "create_account"
   | "payment_in"
   | "swap_in"
-  | "blend_withdraw"
-  | "eurc_par";
+  | "blend_withdraw";
 
 // What disposed a lot slice
 export type DispKind =
@@ -56,23 +55,11 @@ export function computeFifoFills(
   const inventories: Record<Currency, Batch[]> = {
     XLM: [],
     USDC: [],
-    // handle EURC as a single rolling batch, because proceeds = cost
-    EURC: [
-      {
-        batchId: "EURC#PAR",
-        currency: "EURC",
-        acquiredAt: new Date(0), // epoch placeholder
-        acqKind: "eurc_par",
-        acqTxHash: "PAR",
-        priceMicroAtAcq: MICRO_PER_EUR,
-        qtyInitialStroops: 0n,
-        qtyRemainingStroops: 0n,
-      },
-    ],
+    EURC: [],
   };
 
   // Sequence counters for batch IDs
-  const batchSeq = { XLM: 0, USDC: 0 };
+  const batchSeq = { XLM: 0, USDC: 0, EURC: 0 };
 
   const fills: Fill[] = [];
 
@@ -97,7 +84,7 @@ export function computeFifoFills(
     (destAmountStroops * destPriceMicro + srcAmountStroops / 2n) /
     srcAmountStroops;
 
-  const newBatchId = (currency: Exclude<Currency, "EURC">) =>
+  const newBatchId = (currency: Currency) =>
     `${currency}#${String(++batchSeq[currency]).padStart(4, "0")}`;
 
   const addBatch = (
@@ -108,14 +95,7 @@ export function computeFifoFills(
     acqKind: AcqKind,
   ) => {
     if (qty === 0n) return;
-    if (currency === "EURC") {
-      // Collapse EURC into a single par lot
-      const lot = inventories.EURC[0];
-      lot.qtyRemainingStroops += qty;
-      lot.qtyInitialStroops += qty; // optional tally of total inflow
-      return;
-    }
-    // XLM / USDC: normal FIFO lot
+    // All currencies: normal FIFO lot
     inventories[currency].push({
       batchId: newBatchId(currency),
       currency,
@@ -139,37 +119,7 @@ export function computeFifoFills(
     let remaining = params.amountStroops;
     if (remaining === 0n) return;
 
-    if (params.currency === "EURC") {
-      // Consume from single par lot
-      const lot = inventories.EURC[0];
-      if (lot.qtyRemainingStroops < remaining) {
-        throw new Error(
-          `EURC underflow on ${params.date.toISOString()} (need ${remaining}, have ${lot.qtyRemainingStroops})`,
-        );
-      }
-      const dispPrice = params.proceedsPriceMicro ?? MICRO_PER_EUR;
-      const proceedsCents = valueCentsFromStroops(remaining, dispPrice);
-      const costCents = valueCentsFromStroops(remaining, MICRO_PER_EUR);
-      const fill: Fill = {
-        txHash: params.txHash,
-        currency: "EURC",
-        amountStroops: remaining,
-        batchId: lot.batchId,
-        acquiredAt: lot.acquiredAt,
-        disposedAt: params.date,
-        dispKind: params.dispKind,
-        acqPriceMicro: MICRO_PER_EUR,
-        dispPriceMicro: dispPrice,
-        proceedsCents,
-        costCents,
-        gainLossCents: proceedsCents - costCents, // 0 for normal disposals; negative for fees
-      };
-      fills.push(fill);
-      lot.qtyRemainingStroops -= remaining;
-      return;
-    }
-
-    // XLM / USDC disposals: consume FIFO across multiple lots if needed
+    // All currencies: consume FIFO across multiple lots if needed
     const disposalPrice =
       params.proceedsPriceMicro ?? getPriceMicro(params.currency, params.date);
     const inv = inventories[params.currency];
