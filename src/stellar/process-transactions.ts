@@ -14,7 +14,7 @@ export function processTransactions(
     BLND: 0n,
   };
 
-  for (const { tx, ops, trades } of transactions) {
+  for (const { tx, ops, trades, mergeCredits } of transactions) {
     const rowOps: TxOpSummary[] = [];
 
     // Apply operation effects
@@ -173,9 +173,20 @@ export function processTransactions(
           kind: "end_sponsoring_future_reserves",
         });
       } else if (op.type === "account_merge") {
-        rowOps.push({
-          kind: "account_merge",
-        })
+        const creditedStroops = mergeCredits?.[op.account] ?? 0n;
+        if (op.into === walletAddress && creditedStroops > 0n) {
+          rowOps.push({
+            kind: "payment",
+            direction: "in",
+            from: op.account,
+            to: walletAddress,
+            currency: "XLM",
+            amountStroops: creditedStroops,
+          });
+          balances.XLM += creditedStroops;
+        } else {
+          rowOps.push({ kind: "account_merge" });
+        }
       } else if (op.type === "create_claimable_balance") {
         rowOps.push({
           kind: "create_claimable_balance",

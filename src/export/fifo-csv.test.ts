@@ -16,7 +16,12 @@ const mockTxRows: TxRow[] = [
 
 describe("buildEventsCsv", () => {
   it("should generate empty CSV with headers when no events", () => {
-    const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [], BLND: [] };
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [],
+      USDC: [],
+      EURC: [],
+      BLND: [],
+    };
     const fills: Fill[] = [];
 
     const csv = buildEventsCsv(batches, fills, mockTxRows);
@@ -74,7 +79,12 @@ describe("buildEventsCsv", () => {
       dispKind: "swap_out",
       txHash: "def456",
     };
-    const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [], BLND: [] };
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [],
+      USDC: [],
+      EURC: [],
+      BLND: [],
+    };
     const fills: Fill[] = [fill];
 
     const csv = buildEventsCsv(batches, fills, mockTxRows);

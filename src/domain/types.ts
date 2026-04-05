@@ -18,58 +18,58 @@ type TxRow = {
 
 type TxOpSummary =
   | { kind: "create_account"; from: string; to: string; amountStroops: bigint }
-  | { kind: "account_merge"; }
+  | { kind: "account_merge" }
   | {
-    kind: "payment";
-    direction: "in" | "out";
-    from: string;
-    to: string;
-    currency: Currency;
-    amountStroops: bigint;
-  }
+      kind: "payment";
+      direction: "in" | "out";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
   | {
-    kind: "swap";
-    sourceCurrency: Currency;
-    sourceAmountStroops: bigint;
-    destinationCurrency: Currency;
-    destinationAmountStroops: bigint;
-  }
+      kind: "swap";
+      sourceCurrency: Currency;
+      sourceAmountStroops: bigint;
+      destinationCurrency: Currency;
+      destinationAmountStroops: bigint;
+    }
   | {
-    kind: "sell_offer";
-    sourceCurrency: Currency;
-    sourceAmountStroops: bigint;
-    destinationCurrency: Currency;
-    destinationAmountStroops: bigint;
-  }
+      kind: "sell_offer";
+      sourceCurrency: Currency;
+      sourceAmountStroops: bigint;
+      destinationCurrency: Currency;
+      destinationAmountStroops: bigint;
+    }
   | {
-    kind: "swap_fee";
-    from: string;
-    to: string;
-    currency: Currency;
-    amountStroops: bigint;
-  }
+      kind: "swap_fee";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
   | {
-    kind: "blend_deposit" | "blend_withdraw";
-    from: string;
-    to: string;
-    currency: Currency;
-    amountStroops: bigint;
-  }
+      kind: "blend_deposit" | "blend_withdraw";
+      from: string;
+      to: string;
+      currency: Currency;
+      amountStroops: bigint;
+    }
   | {
-    kind: "change_trust";
-    currency: Currency;
-  }
+      kind: "change_trust";
+      currency: Currency;
+    }
   | {
-    kind: "set_options";
-  }
+      kind: "set_options";
+    }
   | {
-    kind: "begin_sponsoring_future_reserves";
-  }
+      kind: "begin_sponsoring_future_reserves";
+    }
   | {
-    kind: "end_sponsoring_future_reserves";
-  }
+      kind: "end_sponsoring_future_reserves";
+    }
   | {
-    kind: "create_claimable_balance";
-    amount: string;
-    currency: string;
-  };
+      kind: "create_claimable_balance";
+      amount: string;
+      currency: string;
+    };
