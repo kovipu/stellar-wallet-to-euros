@@ -1,9 +1,10 @@
-type Currency = "XLM" | "USDC" | "EURC";
+type Currency = "XLM" | "USDC" | "EURC" | "BLND";
 
 type Balances = {
   XLM: bigint;
   USDC: bigint;
   EURC: bigint;
+  BLND: bigint;
 };
 
 type TxRow = {
@@ -17,6 +18,7 @@ type TxRow = {
 
 type TxOpSummary =
   | { kind: "create_account"; from: string; to: string; amountStroops: bigint }
+  | { kind: "account_merge" }
   | {
       kind: "payment";
       direction: "in" | "out";

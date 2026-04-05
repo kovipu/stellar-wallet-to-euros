@@ -53,6 +53,78 @@ describe("processTransactions", () => {
     expect(txRow.balances.EURC).toBe(0n);
   });
 
+  it("process a create_account where wallet is the funder (outgoing XLM)", () => {
+    const mockTxWithOps = [
+      buildCreateAccountTx("1000.0000000"), // our account created with 1000 XLM
+      {
+        tx: {
+          hash: "tx2",
+          created_at: "2024-01-02T00:00:00Z",
+          fee_charged: "100",
+          fee_account: myWalletAddress,
+        } as Horizon.ServerApi.TransactionRecord,
+        ops: [
+          {
+            type: "create_account",
+            funder: myWalletAddress, // we are funding another account
+            account: "GNEW...",
+            starting_balance: "7.0000000",
+            created_at: "2024-01-02T00:00:00Z",
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
+      },
+    ];
+
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
+    expect(txRows).toHaveLength(2);
+
+    const fundRow = txRows[1];
+    expect(fundRow.ops).toHaveLength(1);
+    const op = fundRow.ops[0];
+    if (op.kind !== "payment") fail("Expected payment op");
+    expect(op.direction).toBe("out");
+    expect(op.currency).toBe("XLM");
+    expect(op.amountStroops).toBe(70000000n);
+    expect(op.from).toBe(myWalletAddress);
+    expect(op.to).toBe("GNEW...");
+
+    // Balance should be 1000 XLM - 7 XLM - 100 stroops fee, NOT reset to 7
+    expect(fundRow.balances.XLM).toBe(10000000000n - 70000000n - 100n);
+  });
+
+  it("ignore self-transfer payments (from === to === wallet)", () => {
+    const mockTxWithOps = [
+      buildCreateAccountTx("1000.0000000"),
+      {
+        tx: {
+          hash: "tx2",
+          created_at: "2024-01-02T00:00:00Z",
+          fee_charged: "100",
+          fee_account: myWalletAddress,
+        } as Horizon.ServerApi.TransactionRecord,
+        ops: [
+          {
+            type: "payment",
+            from: myWalletAddress,
+            to: myWalletAddress, // self-transfer
+            amount: "500.0000000",
+            asset_type: "credit_alphanum4",
+            asset_code: "BLND",
+            created_at: "2024-01-02T00:00:00Z",
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
+      },
+    ];
+
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
+    expect(txRows).toHaveLength(2);
+
+    const selfRow = txRows[1];
+    expect(selfRow.ops).toHaveLength(0); // no ops emitted
+    expect(selfRow.balances.BLND).toBe(0n); // balance unchanged
+    expect(selfRow.balances.XLM).toBe(10000000000n - 100n); // only fee deducted
+  });
+
   it("process a mix of create_account and payment operations", () => {
     const mockTxWithOps = [
       buildCreateAccountTx("1000.0000000"),
@@ -409,6 +481,59 @@ describe("processTransactions", () => {
     expect(swapRow.balances.XLM).toBe(99877000n);
     expect(swapRow.balances.USDC).toBe(409881616n);
     expect(swapRow.balances.EURC).toBe(0n);
+  });
+
+  it("process a Blend repayment with credit back (multiple asset_balance_changes)", () => {
+    const mockTxWithOps = [
+      buildCreateAccountTx("1000.0000000"),
+      {
+        tx: {
+          hash: "tx2",
+          created_at: "2024-01-10T00:00:00Z",
+          fee_charged: "123000",
+          fee_account: myWalletAddress,
+        } as Horizon.ServerApi.TransactionRecord,
+        ops: [
+          {
+            type: "invoke_host_function",
+            source_account: myWalletAddress,
+            created_at: "2024-01-10T00:00:00Z",
+            asset_balance_changes: [
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDC",
+                type: "transfer",
+                from: myWalletAddress,
+                to: "CAJ...",
+                amount: "201.0000000", // sent to contract
+              },
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDC",
+                type: "transfer",
+                from: "CAJ...",
+                to: myWalletAddress,
+                amount: "1.0000000", // change returned from contract
+              },
+            ],
+          },
+        ] as Horizon.ServerApi.OperationRecord[],
+      },
+    ];
+
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
+    expect(txRows).toHaveLength(2);
+    const repayRow = txRows[1];
+    expect(repayRow.ops).toHaveLength(2);
+    expect(repayRow.ops[0].kind).toBe("blend_deposit");
+    expect(repayRow.ops[1].kind).toBe("blend_withdraw");
+    if (repayRow.ops[0].kind !== "blend_deposit") fail("not blend_deposit");
+    if (repayRow.ops[1].kind !== "blend_withdraw") fail("not blend_withdraw");
+    expect(repayRow.ops[0].amountStroops).toBe(2010000000n);
+    expect(repayRow.ops[1].amountStroops).toBe(10000000n);
+    // net: -200 USDC
+    expect(repayRow.balances.USDC).toBe(-2000000000n);
+    expect(repayRow.balances.XLM).toBe(9999877000n);
   });
 
   it("process a sell offer transaction", () => {

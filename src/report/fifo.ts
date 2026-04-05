@@ -56,10 +56,11 @@ export function computeFifoFills(
     XLM: [],
     USDC: [],
     EURC: [],
+    BLND: [],
   };
 
   // Sequence counters for batch IDs
-  const batchSeq = { XLM: 0, USDC: 0, EURC: 0 };
+  const batchSeq = { XLM: 0, USDC: 0, EURC: 0, BLND: 0 };
 
   const fills: Fill[] = [];
 

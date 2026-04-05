@@ -11,25 +11,42 @@ export function processTransactions(
     XLM: 0n,
     USDC: 0n,
     EURC: 0n,
+    BLND: 0n,
   };
 
-  for (const { tx, ops, trades } of transactions) {
+  for (const { tx, ops, trades, mergeCredits } of transactions) {
     const rowOps: TxOpSummary[] = [];
 
     // Apply operation effects
     for (const op of ops) {
       if (op.type === "create_account") {
         const amountStroops = toStroops(op.starting_balance);
-        rowOps.push({
-          kind: "create_account",
-          from: op.funder,
-          to: walletAddress,
-          amountStroops,
-        });
-        balances.XLM = amountStroops;
+        if (op.funder !== walletAddress) {
+          // Our wallet is being created by someone else
+          rowOps.push({
+            kind: "create_account",
+            from: op.funder,
+            to: walletAddress,
+            amountStroops,
+          });
+          balances.XLM += amountStroops;
+        } else {
+          // We are funding another account — treat as outgoing XLM payment
+          rowOps.push({
+            kind: "payment",
+            direction: "out",
+            from: walletAddress,
+            to: op.account,
+            currency: "XLM",
+            amountStroops,
+          });
+          balances.XLM -= amountStroops;
+        }
       } else if (op.type === "payment") {
         const currency = toCurrency(op.asset_type, op.asset_code);
-        if (op.to === walletAddress) {
+        if (op.from === walletAddress && op.to === walletAddress) {
+          // Self-transfer: no net balance change, nothing to report
+        } else if (op.to === walletAddress) {
           rowOps.push({
             kind: "payment",
             direction: "in",
@@ -101,36 +118,42 @@ export function processTransactions(
           balances[sourceCurrency] -= sourceAmountStroops;
         }
       } else if (op.type === "invoke_host_function") {
-        const balanceChange = op.asset_balance_changes[0];
-        if (balanceChange.type !== "transfer") {
-          throw new Error("Expected balance change to be a transfer");
-        }
+        for (const balanceChange of op.asset_balance_changes) {
+          const involvesWallet =
+            balanceChange.from === walletAddress ||
+            balanceChange.to === walletAddress;
+          if (!involvesWallet) continue;
 
-        const currency = toCurrency(
-          balanceChange.asset_type,
-          balanceChange.asset_code,
-        );
+          if (balanceChange.type !== "transfer") {
+            throw new Error("Expected balance change to be a transfer");
+          }
 
-        if (balanceChange.from === walletAddress) {
-          // deposit
-          rowOps.push({
-            kind: "blend_deposit",
-            from: balanceChange.from,
-            to: balanceChange.to,
-            currency,
-            amountStroops: toStroops(balanceChange.amount),
-          });
-          balances[currency] -= toStroops(balanceChange.amount);
-        } else {
-          // withdraw
-          rowOps.push({
-            kind: "blend_withdraw",
-            from: balanceChange.from,
-            to: balanceChange.to,
-            currency,
-            amountStroops: toStroops(balanceChange.amount),
-          });
-          balances[currency] += toStroops(balanceChange.amount);
+          const currency = toCurrency(
+            balanceChange.asset_type,
+            balanceChange.asset_code,
+          );
+
+          if (balanceChange.from === walletAddress) {
+            // deposit
+            rowOps.push({
+              kind: "blend_deposit",
+              from: balanceChange.from,
+              to: balanceChange.to,
+              currency,
+              amountStroops: toStroops(balanceChange.amount),
+            });
+            balances[currency] -= toStroops(balanceChange.amount);
+          } else {
+            // withdraw
+            rowOps.push({
+              kind: "blend_withdraw",
+              from: balanceChange.from,
+              to: balanceChange.to,
+              currency,
+              amountStroops: toStroops(balanceChange.amount),
+            });
+            balances[currency] += toStroops(balanceChange.amount);
+          }
         }
       } else if (op.type === "change_trust") {
         rowOps.push({
@@ -149,6 +172,21 @@ export function processTransactions(
         rowOps.push({
           kind: "end_sponsoring_future_reserves",
         });
+      } else if (op.type === "account_merge") {
+        const creditedStroops = mergeCredits?.[op.account] ?? 0n;
+        if (op.into === walletAddress && creditedStroops > 0n) {
+          rowOps.push({
+            kind: "payment",
+            direction: "in",
+            from: op.account,
+            to: walletAddress,
+            currency: "XLM",
+            amountStroops: creditedStroops,
+          });
+          balances.XLM += creditedStroops;
+        } else {
+          rowOps.push({ kind: "account_merge" });
+        }
       } else if (op.type === "create_claimable_balance") {
         rowOps.push({
           kind: "create_claimable_balance",

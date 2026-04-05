@@ -1,4 +1,4 @@
-import { DAY_IN_MS, MICRO_PER_EUR, STROOPS_PER_UNIT } from "../domain/units";
+import { DAY_IN_MS, MICRO_PER_EUR } from "../domain/units";
 import { dateKeyUTC } from "./date-keys";
 import {
   CacheEntry,
@@ -21,8 +21,16 @@ export async function buildPriceBook(
     new Set(txRows.map((r) => dateKeyUTC(r.date))).values(),
   ).sort();
 
-  // 2) Hydrate XLM once over the full range
-  // await hydrateXlmRangeAround(dateKeys, cache);
+  // 2) Hydrate CoinGecko currencies with a single call each covering the full range.
+  //    Must be done sequentially before Promise.all to avoid firing concurrent requests
+  //    for the same currency (all parallel branches would see an empty cache and each
+  //    fire its own request, instantly blowing the 30 req/min rate limit).
+  if (dateKeys.length > 0) {
+    const firstKey = dateKeys[0];
+    const lastKey = dateKeys[dateKeys.length - 1];
+    await hydrateCoinGeckoRange("XLM", firstKey, lastKey, cache);
+    await hydrateCoinGeckoRange("BLND", firstKey, lastKey, cache);
+  }
 
   // 3) Ensure EURC & USDC exist for each day
   await Promise.all(
@@ -45,19 +53,13 @@ export async function buildPriceBook(
           fetchedAt: Date.now(),
         });
       }
-
-      // XLM should already be present from hydration; as a safety net:
-      if (!getCachedPrice(cache, "XLM", dateKey)) {
-        // fallback: tiny hydration around the missing day
-        await hydrateXlmRangeAround(dateKey, cache);
-      }
     }),
   );
 
-  // 4) Assemble book: all 3 assets × each day
+  // 4) Assemble book: all 4 assets × each day
   const book: PriceBook = {};
   for (const dk of dateKeys) {
-    for (const c of ["XLM", "USDC", "EURC"] as const) {
+    for (const c of ["XLM", "USDC", "EURC", "BLND"] as const) {
       const entry = getCachedPrice(cache, c, dk);
       if (!entry) throw new Error(`Missing ${c} price for ${dk}`);
       book[priceKey(c, dk)] = entry;
@@ -106,32 +108,44 @@ export async function priceMicroEUR(
     return newPrice;
   }
 
-  // XLM via CoinGecko (date range hydration first)
-  await hydrateXlmRangeAround(dateKey, cache);
-  const maybe = getCachedPrice(cache, "XLM", dateKey);
+  // XLM/BLND via CoinGecko: hydrate a 90-day window around the requested date
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const centerMs = Date.UTC(y, m - 1, d);
+  const fromKey = dateKeyUTC(new Date(centerMs - 60 * DAY_IN_MS));
+  const toKey = dateKeyUTC(new Date(centerMs + 30 * DAY_IN_MS));
+  await hydrateCoinGeckoRange(currency, fromKey, toKey, cache);
+  const maybe = getCachedPrice(cache, currency, dateKey);
   if (maybe !== undefined) return maybe;
 
-  // this should be very rare: need to fallback to single-day endpoint
-  throw new Error("XLM price not found");
+  throw new Error(`${currency} price not found`);
 }
 
-/** Hydrate many XLM days in one CoinGecko call to avoid 429s. */
-export async function hydrateXlmRangeAround(
-  dateKey: string,
+const COINGECKO_IDS: Partial<Record<Currency, string>> = {
+  XLM: "stellar",
+  BLND: "blend",
+};
+
+const dateKeyToMs = (dk: string): number => {
+  const [y, m, d] = dk.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+
+/** Fetch CoinGecko prices for a currency over [fromDateKey, toDateKey] and populate cache. */
+async function hydrateCoinGeckoRange(
+  currency: Currency,
+  fromDateKey: string,
+  toDateKey: string,
   cache: PriceCache,
-  daysBack = 60,
-  daysForward = 30,
 ): Promise<void> {
-  if (getCachedPrice(cache, "XLM", dateKey) !== undefined) return;
+  const coinId = COINGECKO_IDS[currency];
+  if (!coinId) throw new Error(`No CoinGecko ID configured for ${currency}`);
 
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const centerStartMs = Date.UTC(y, m - 1, d); // 00:00:00Z of that day
-  const fromSec = Math.floor((centerStartMs - daysBack * DAY_IN_MS) / 1000);
-  const toSec = Math.floor((centerStartMs + daysForward * DAY_IN_MS) / 1000);
+  const fromSec = Math.floor(dateKeyToMs(fromDateKey) / 1000);
+  // Add one day to toDateKey so the range is inclusive
+  const toSec = Math.floor((dateKeyToMs(toDateKey) + DAY_IN_MS) / 1000);
 
-  // const url = `https://api.coingecko.com/api/v3/coins/stellar/market_chart/range?vs_currency=eur&from=${fromSec}&to=${toSec}`;
   const url = new URL(
-    "api/v3/coins/stellar/market_chart/range",
+    `api/v3/coins/${coinId}/market_chart/range`,
     "https://api.coingecko.com/",
   );
   url.searchParams.set("vs_currency", "eur");
@@ -156,7 +170,7 @@ export async function hydrateXlmRangeAround(
 
   const now = Date.now();
   for (const [dk, micro] of map) {
-    putCachedPrice(cache, "XLM", dk, {
+    putCachedPrice(cache, currency, dk, {
       priceMicroEur: micro,
       source: "coingecko",
       fetchedAt: now,

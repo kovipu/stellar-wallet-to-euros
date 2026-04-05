@@ -28,6 +28,7 @@ export function buildEventsCsv(
     XLM: lastTx.balances.XLM,
     USDC: lastTx.balances.USDC,
     EURC: lastTx.balances.EURC,
+    BLND: lastTx.balances.BLND,
   };
 
   const events: Event[] = [];

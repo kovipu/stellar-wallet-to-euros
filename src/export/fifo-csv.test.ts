@@ -9,13 +9,19 @@ const mockTxRows: TxRow[] = [
     date: new Date("2025-01-01T00:00:00Z"),
     ops: [],
     feeStroops: 0n,
-    balances: { XLM: 0n, USDC: 0n, EURC: 0n },
+    balances: { XLM: 0n, USDC: 0n, EURC: 0n, BLND: 0n },
+    horizonRaw: {},
   },
 ];
 
 describe("buildEventsCsv", () => {
   it("should generate empty CSV with headers when no events", () => {
-    const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [] };
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [],
+      USDC: [],
+      EURC: [],
+      BLND: [],
+    };
     const fills: Fill[] = [];
 
     const csv = buildEventsCsv(batches, fills, mockTxRows);
@@ -41,6 +47,7 @@ describe("buildEventsCsv", () => {
       XLM: [batch],
       USDC: [],
       EURC: [],
+      BLND: [],
     };
     const fills: Fill[] = [];
 
@@ -72,7 +79,12 @@ describe("buildEventsCsv", () => {
       dispKind: "swap_out",
       txHash: "def456",
     };
-    const batches: Record<Currency, Batch[]> = { XLM: [], USDC: [], EURC: [] };
+    const batches: Record<Currency, Batch[]> = {
+      XLM: [],
+      USDC: [],
+      EURC: [],
+      BLND: [],
+    };
     const fills: Fill[] = [fill];
 
     const csv = buildEventsCsv(batches, fills, mockTxRows);
@@ -107,6 +119,7 @@ describe("buildEventsCsv", () => {
       XLM: [],
       USDC: [],
       EURC: [emptyBatch],
+      BLND: [],
     };
     const fills: Fill[] = [];
 
@@ -156,6 +169,7 @@ describe("buildEventsCsv", () => {
       XLM: [xlmBatch],
       USDC: [usdcBatch],
       EURC: [],
+      BLND: [],
     };
     const fills: Fill[] = [xlmFill];
 
@@ -166,7 +180,8 @@ describe("buildEventsCsv", () => {
         date: new Date("2025-04-03T10:00:00Z"),
         ops: [],
         feeStroops: 0n,
-        balances: { XLM: 500_0000000n, USDC: 100_0000000n, EURC: 0n },
+        balances: { XLM: 500_0000000n, USDC: 100_0000000n, EURC: 0n, BLND: 0n },
+        horizonRaw: {},
       },
     ];
 
@@ -210,6 +225,7 @@ describe("buildEventsCsv", () => {
       XLM: [batch1, batch2],
       USDC: [],
       EURC: [],
+      BLND: [],
     };
     const fills: Fill[] = [];
 
@@ -266,6 +282,7 @@ describe("buildEventsCsv", () => {
       XLM: [batch],
       USDC: [],
       EURC: [],
+      BLND: [],
     };
     const fills: Fill[] = [fill1, fill2];
 
@@ -330,6 +347,7 @@ describe("buildEventsCsv", () => {
       XLM: [batch4, batch2, batch3, batch1], // Intentionally out of order
       USDC: [],
       EURC: [],
+      BLND: [],
     };
     const fills: Fill[] = [];
 

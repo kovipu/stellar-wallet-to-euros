@@ -1,4 +1,5 @@
 import { Horizon } from "@stellar/stellar-sdk";
+import { toStroops } from "../domain/units";
 type TransactionRecord = Horizon.ServerApi.TransactionRecord;
 type OperationRecord = Horizon.ServerApi.OperationRecord;
 type TradeRecord = Horizon.ServerApi.TradeRecord;
@@ -9,6 +10,9 @@ export type TxWithOps = {
   tx: TransactionRecord;
   ops: OperationRecord[];
   trades?: TradeRecord[];
+  // XLM amounts (in stroops) credited to wallet by account_merge ops,
+  // keyed by the merged account address
+  mergeCredits?: Record<string, bigint>;
 };
 
 // TODO: find a nicer way to get the offerId for a manage_sell_offer tx
@@ -50,6 +54,28 @@ export async function fetchTransactionsWithOps(
       }
       const trades = await fetchTradesForOffer(offerId);
       return { tx, ops, trades };
+    }
+
+    const mergeOps = ops.filter(
+      (op): op is Horizon.ServerApi.AccountMergeOperationRecord =>
+        op.type === "account_merge" && op.into === wallet,
+    );
+    if (mergeOps.length > 0) {
+      const mergeCredits: Record<string, bigint> = {};
+      for (const mergeOp of mergeOps) {
+        const effects = await fetchEffectsForOp(mergeOp.id);
+        const credit = effects.find(
+          (e): e is Horizon.ServerApi.AccountCreditedEffectRecord =>
+            e.type === "account_credited" &&
+            e.account === wallet &&
+            (e as Horizon.ServerApi.AccountCreditedEffectRecord).asset_type ===
+              "native",
+        );
+        if (credit) {
+          mergeCredits[mergeOp.account] = toStroops(credit.amount);
+        }
+      }
+      return { tx, ops, mergeCredits };
     }
 
     return { tx, ops };
@@ -118,6 +144,14 @@ async function fetchOperations(wallet: string): Promise<OperationRecord[]> {
 
   console.log(`Fetched ${ops.length} operations.`);
   return ops;
+}
+
+/** Fetch effects for a specific operation */
+async function fetchEffectsForOp(
+  opId: string,
+): Promise<Horizon.ServerApi.EffectRecord[]> {
+  const page = await horizonServer.effects().forOperation(opId).call();
+  return page.records;
 }
 
 /** Fetch all the trades for a specific offer */
