@@ -26,10 +26,12 @@ export async function buildPriceBook(
   //    for the same currency (all parallel branches would see an empty cache and each
   //    fire its own request, instantly blowing the 30 req/min rate limit).
   if (dateKeys.length > 0) {
-    const firstKey = dateKeys[0];
-    const lastKey = dateKeys[dateKeys.length - 1];
-    await hydrateCoinGeckoRange("XLM", firstKey, lastKey, cache);
-    await hydrateCoinGeckoRange("BLND", firstKey, lastKey, cache);
+    for (const currency of ["XLM", "BLND"] as const) {
+      const uncached = dateKeys.filter((dk) => !getCachedPrice(cache, currency, dk));
+      if (uncached.length > 0) {
+        await hydrateCoinGeckoRange(currency, uncached[0], uncached[uncached.length - 1], cache);
+      }
+    }
   }
 
   // 3) Ensure EURC & USDC exist for each day
