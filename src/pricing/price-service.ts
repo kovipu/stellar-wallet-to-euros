@@ -27,9 +27,16 @@ export async function buildPriceBook(
   //    fire its own request, instantly blowing the 30 req/min rate limit).
   if (dateKeys.length > 0) {
     for (const currency of ["XLM", "BLND"] as const) {
-      const uncached = dateKeys.filter((dk) => !getCachedPrice(cache, currency, dk));
+      const uncached = dateKeys.filter(
+        (dk) => !getCachedPrice(cache, currency, dk),
+      );
       if (uncached.length > 0) {
-        await hydrateCoinGeckoRange(currency, uncached[0], uncached[uncached.length - 1], cache);
+        await hydrateCoinGeckoRange(
+          currency,
+          uncached[0],
+          uncached[uncached.length - 1],
+          cache,
+        );
       }
     }
   }
