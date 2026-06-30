@@ -590,4 +590,102 @@ describe("processTransactions", () => {
     expect(sellOfferRow.balances.EURC).toBe(170667624393n);
     expect(sellOfferRow.balances.USDC).toBe(0n);
   });
+
+  it("process a buy offer transaction (wallet as counter_account)", () => {
+    // manage_buy_offer: buy XLM (buying_asset) with EURC (selling_asset).
+    // In practice our wallet is the counter_account in these trades, so source
+    // amount = counter_amount, destination amount = base_amount.
+    const mockBuyOffer = {
+      type: "manage_buy_offer",
+      source_account: myWalletAddress,
+      created_at: "2025-02-01T00:00:00Z",
+      selling_asset_type: "credit_alphanum4",
+      selling_asset_code: "EURC",
+      buying_asset_type: "native",
+      amount: "10000.0000000",
+      price: "0.1250000",
+    } as Horizon.ServerApi.OperationRecord;
+
+    const mockTrades: Horizon.ServerApi.TradeRecord.Orderbook[] = [
+      {
+        trade_type: "orderbook",
+        base_account: "OTHER_ACCOUNT",
+        base_offer_id: "67890",
+        base_amount: "200.0000000", // XLM bought (base)
+        base_asset_type: "native",
+        counter_account: myWalletAddress, // wallet is counter
+        counter_offer_id: "12345",
+        counter_amount: "25.0000000", // EURC paid (counter)
+        counter_asset_type: "credit_alphanum4",
+      } as Horizon.ServerApi.TradeRecord.Orderbook,
+      {
+        trade_type: "orderbook",
+        base_account: "OTHER_ACCOUNT_2",
+        base_offer_id: "67891",
+        base_amount: "500.0000000",
+        base_asset_type: "native",
+        counter_account: myWalletAddress,
+        counter_offer_id: "12345",
+        counter_amount: "62.5000000",
+        counter_asset_type: "credit_alphanum4",
+      } as Horizon.ServerApi.TradeRecord.Orderbook,
+    ];
+
+    // Seed 1000 EURC via incoming payment so the buy offer can debit it
+    const seedEurcTx = {
+      tx: {
+        hash: "seedeurc",
+        created_at: "2025-01-15T00:00:00Z",
+        fee_charged: "0",
+        fee_account: "GBX...",
+      } as Horizon.ServerApi.TransactionRecord,
+      ops: [
+        {
+          type: "payment",
+          from: "GBX...",
+          to: myWalletAddress,
+          amount: "1000.0000000",
+          asset_type: "credit_alphanum4",
+          asset_code: "EURC",
+          created_at: "2025-01-15T00:00:00Z",
+        },
+      ] as Horizon.ServerApi.OperationRecord[],
+    };
+
+    const mockTxWithOps = [
+      buildCreateAccountTx("100.0000000"),
+      seedEurcTx,
+      {
+        tx: {
+          hash: "buyoffer",
+          created_at: "2025-02-01T00:00:00Z",
+          fee_charged: "10",
+          fee_account: myWalletAddress,
+        } as Horizon.ServerApi.TransactionRecord,
+        ops: [mockBuyOffer],
+        trades: mockTrades,
+      },
+    ];
+
+    const txRows = processTransactions(mockTxWithOps, myWalletAddress);
+    expect(txRows).toHaveLength(3);
+
+    const buyOfferRow = txRows[2];
+    expect(buyOfferRow.transactionHash).toBe("buyoffer");
+    expect(buyOfferRow.feeStroops).toBe(10n);
+    expect(buyOfferRow.ops).toHaveLength(1);
+
+    const op = buyOfferRow.ops[0];
+    if (op.kind !== "buy_offer") fail("Expected buy_offer kind");
+    expect(op.sourceCurrency).toBe("EURC");
+    expect(op.sourceAmountStroops).toBe(875000000n); // 25 + 62.5 = 87.5 EURC
+    expect(op.destinationCurrency).toBe("XLM");
+    expect(op.destinationAmountStroops).toBe(7000000000n); // 200 + 500 = 700 XLM
+
+    // 100 XLM - 10 stroops fee + 700 XLM bought
+    expect(buyOfferRow.balances.XLM).toBe(1000000000n - 10n + 7000000000n);
+    // 1000 EURC - 87.5 EURC spent
+    expect(buyOfferRow.balances.EURC).toBe(10000000000n - 875000000n);
+    expect(buyOfferRow.balances.USDC).toBe(0n);
+  });
 });

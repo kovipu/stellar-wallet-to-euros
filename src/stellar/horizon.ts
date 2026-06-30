@@ -15,12 +15,18 @@ export type TxWithOps = {
   mergeCredits?: Record<string, bigint>;
 };
 
-// TODO: find a nicer way to get the offerId for a manage_sell_offer tx
+// TODO: find a nicer way to get the offerId for a manage_{sell,buy}_offer tx
+// (op.offer_id is "0" when the offer was newly created in this tx, so we have
+// to map tx hash → offer id by hand)
 const offerIdByTxHash: Record<string, string> = {
   "448e8f032d02fe7d018d5f09761b5bac03bcace1b2c55277d91bd20be160744b":
     "1799912560",
   "9e3acf4434995cbc6728a7e7e9d73b00e42841b8ddbeb787a9412d72dc6c7593":
     "1800705918",
+  ab0dd40c5662d67f88a5617bcf1f8fc3f33c1943d57fd74f4f4afa7581751bf9:
+    "1832961447",
+  e3bb6386eb12afd23b756cdfb33d8d2d33d59f2c03ba5cacd6da6d00197672ea:
+    "1839352547",
 };
 
 /** Fetch all the transactions with operations for the wallet specified */
@@ -47,7 +53,12 @@ export async function fetchTransactionsWithOps(
       throw Error(`Transaction ${tx.hash} has no operations for this wallet`);
     }
 
-    if (ops.some((op) => op.type === "manage_sell_offer")) {
+    if (
+      ops.some(
+        (op) =>
+          op.type === "manage_sell_offer" || op.type === "manage_buy_offer",
+      )
+    ) {
       const offerId = offerIdByTxHash[tx.hash];
       if (!offerId) {
         throw Error(`No offerId found for tx: ${tx.hash}`);

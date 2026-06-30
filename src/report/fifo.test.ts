@@ -1822,6 +1822,52 @@ describe("fifo.ts", () => {
       expect(result.endingBatches.USDC).toHaveLength(1);
       expect(result.endingBatches.USDC[0].acqKind).toBe("swap_in");
     });
+
+    it("should handle buy_offer identically to swap", () => {
+      // Mirror of the sell_offer test: buy_offer should also funnel through
+      // the swap_out/swap_in fifo path.
+      const txs = [
+        createTx(new Date("2025-01-01"), [
+          {
+            kind: "payment",
+            direction: "in",
+            from: "sender",
+            to: "wallet",
+            currency: "USDC",
+            amountStroops: 25_0000000n,
+          },
+        ]),
+        createTx(new Date("2025-01-10"), [
+          {
+            kind: "buy_offer",
+            sourceCurrency: "USDC",
+            sourceAmountStroops: 25_0000000n,
+            destinationCurrency: "XLM",
+            destinationAmountStroops: 50_0000000n,
+          },
+        ]),
+      ];
+
+      const priceBook = createPriceBook({
+        "USDC:2025-01-01": 0.95,
+        "XLM:2025-01-10": 0.4,
+      });
+
+      const result = computeFifoFills(txs, priceBook);
+
+      expect(result.fills).toHaveLength(1);
+      const fill = result.fills[0];
+      expect(fill.currency).toBe("USDC");
+      expect(fill.dispKind).toBe("swap_out");
+
+      // 50 XLM @ 0.4 = 20 EUR / 25 USDC = 0.8 EUR per USDC
+      expect(fill.dispPriceMicro).toBe(800_000n);
+
+      // Acquired XLM batch
+      expect(result.endingBatches.XLM).toHaveLength(1);
+      expect(result.endingBatches.XLM[0].acqKind).toBe("swap_in");
+      expect(result.endingBatches.XLM[0].qtyRemainingStroops).toBe(50_0000000n);
+    });
   });
 
   describe("Ending Inventory Tests", () => {
