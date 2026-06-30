@@ -16,7 +16,7 @@ import type { BlendDailyRow, BlendPosition } from "./blend/types";
 function parseArgs(): { wallet: string; days: number; noCache: boolean } {
   const args = process.argv.slice(2);
   let wallet = "";
-  let days = 365;
+  let days = 1100;
   let noCache = false;
 
   for (let i = 0; i < args.length; i++) {

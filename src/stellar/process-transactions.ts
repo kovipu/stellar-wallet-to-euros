@@ -193,7 +193,10 @@ export function processTransactions(
           amount: op.amount,
           currency: op.asset,
         });
-      } else if (op.type === "manage_sell_offer") {
+      } else if (
+        op.type === "manage_sell_offer" ||
+        op.type === "manage_buy_offer"
+      ) {
         const sourceCurrency = toCurrency(
           op.selling_asset_type,
           op.selling_asset_code,
@@ -204,7 +207,7 @@ export function processTransactions(
         );
 
         if (!trades || trades.length === 0) {
-          throw Error("No trades found for the sale offer");
+          throw Error("No trades found for the offer");
         }
 
         const firstTrade = trades[0];
@@ -226,7 +229,7 @@ export function processTransactions(
           : totalBaseAmount;
 
         rowOps.push({
-          kind: "sell_offer",
+          kind: op.type === "manage_buy_offer" ? "buy_offer" : "sell_offer",
           sourceCurrency,
           sourceAmountStroops,
           destinationCurrency,
